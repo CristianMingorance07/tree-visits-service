@@ -1,0 +1,89 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { config } from './config';
+import { runMigrations } from './db/migrations';
+import { visitsRoutes } from './routes/visits';
+import { customersRoutes } from './routes/customers';
+import { configRoutes } from './routes/config';
+
+export async function buildServer() {
+  const fastify = Fastify({ logger: true });
+
+  await fastify.register(cors, {
+    origin: config.corsOrigins,
+    methods: ['GET', 'POST', 'PATCH'],
+  });
+
+  await fastify.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    errorResponseBuilder: () => ({ error: 'Too many requests — slow down' }),
+  });
+
+  fastify.get('/health', { config: { rateLimit: false } }, async (_request, reply) => {
+    return reply.send({ status: 'ok' });
+  });
+
+  if (config.nodeEnv !== 'production') {
+    await fastify.register(swagger, {
+      openapi: {
+        info: {
+          title: 'X Visits = 1 Tree API',
+          description: 'Visit tracking service for Tree-Nation reforestation',
+          version: '1.0.0',
+        },
+        tags: [
+          { name: 'Visits', description: 'Visit recording and reporting' },
+          { name: 'Customers', description: 'Customer lookup' },
+          { name: 'Config', description: 'Runtime configuration' },
+          { name: 'Stats', description: 'Aggregate statistics' },
+        ],
+      },
+    });
+
+    await fastify.register(swaggerUi, {
+      routePrefix: '/docs',
+      uiConfig: { docExpansion: 'list' },
+    });
+  }
+
+  await fastify.register(visitsRoutes);
+  await fastify.register(customersRoutes);
+  await fastify.register(configRoutes);
+
+  fastify.setErrorHandler((error, _request, reply) => {
+    if (error.validation) {
+      return reply.status(400).send({ error: 'Validation error', details: error.message });
+    }
+    fastify.log.error(error);
+    return reply.status(500).send({ error: 'Internal server error' });
+  });
+
+  return fastify;
+}
+
+async function main() {
+  runMigrations();
+  const fastify = await buildServer();
+
+  const shutdown = async () => {
+    fastify.log.info('Shutting down gracefully...');
+    await fastify.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  try {
+    await fastify.listen({ port: config.port, host: '0.0.0.0' });
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+}
+
+main();
