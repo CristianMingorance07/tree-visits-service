@@ -1,0 +1,100 @@
+# Technical Decisions
+
+---
+
+## Why Node.js + TypeScript over other backend options
+
+Tree-Nation is migrating from PHP/Laravel to a Vue 3 + TypeScript frontend. Keeping the backend in TypeScript means a single language across the stack, shared type definitions if a monorepo evolves further, and no context-switching for developers. Node.js is well-suited here: the workload is I/O-bound (SQLite reads/writes) with no CPU-heavy computation, so the event loop is a natural fit. TypeScript's strict mode catches an entire class of bugs at compile time that would otherwise surface only in production.
+
+Alternatives considered:
+- **Go** — excellent performance, but adds a second language to the stack when the team is already investing in TypeScript.
+- **Python/FastAPI** — popular for data tasks but slower cold-start and no type-sharing advantage here.
+
+---
+
+## Why Fastify over Express
+
+Fastify offers:
+1. **Schema-first validation** — route schemas (body, params, response) are declared as JSON Schema objects. Fastify validates inputs automatically and serialises outputs up to 2× faster than `JSON.stringify` via `fast-json-stringify`. This removes a whole category of boilerplate validation code.
+2. **First-class TypeScript support** — generic route handlers and typed request/reply objects with zero extra packages.
+3. **Built-in Swagger integration** via `@fastify/swagger` + `@fastify/swagger-ui` — API docs are generated directly from the same schema objects used for validation, so docs can never drift from reality.
+4. **Better performance** — consistently ~20–30% higher req/s than Express in benchmarks, relevant at scale.
+
+Express would have worked, but the extra setup cost (express-validator, manual serialisation, separate OpenAPI tooling) yields no offsetting benefit.
+
+---
+
+## Why SQLite over in-memory storage or PostgreSQL
+
+| Concern | In-memory | SQLite | PostgreSQL |
+|---|---|---|---|
+| Persistence | ✗ | ✓ | ✓ |
+| External infra | — | none | container/server |
+| ACID transactions | — | ✓ (WAL) | ✓ |
+| Setup effort | trivial | trivial | non-trivial |
+| Scale ceiling | single-process | ~100k writes/day | unlimited |
+
+For a technical assessment that must run with `docker-compose up --build` and no external services, SQLite is the only choice that satisfies all three constraints (persistence, ACID, zero infra). WAL journal mode is enabled so reads don't block writes, giving good concurrent performance for this workload.
+
+---
+
+## Why atomic SQLite transactions for visit counting
+
+The core operation — increment visit counter, check milestone, maybe increment tree counter — must be atomic. Without a transaction:
+
+1. Process A reads `total_visits = 9`
+2. Process B reads `total_visits = 9`
+3. Process A writes `total_visits = 10`, plants a tree
+4. Process B writes `total_visits = 10`, plants a second tree → **double plant**
+
+`db.transaction()` in better-sqlite3 wraps the entire operation in a single SQLite transaction. Because better-sqlite3 is synchronous (no async/await), there is no opportunity for the event loop to interleave operations mid-transaction. The result is correctly serialised visit counting even under concurrent HTTP requests hitting the same Node.js process.
+
+---
+
+## Why hot-reloadable config (PATCH /api/v1/config)
+
+The spec states the threshold must be "configurable". There are two implementation choices:
+- **Env-var only** — requires a container restart to change; downtime for a live deployment.
+- **DB-backed + PATCH endpoint** — the value is read from `app_config` on every visit. A `PATCH /api/v1/config` call updates the DB row and takes effect immediately on the next visit, with no restart.
+
+The DB-backed approach also survives restarts automatically (the last configured value persists). The env var `VISITS_PER_TREE` seeds the default via the Docker Compose environment block, but the live value is always the one in `app_config`.
+
+---
+
+## Why Vue 3 + TypeScript for the frontend
+
+Tree-Nation is explicitly migrating to Vue 3 + TypeScript. This dashboard is therefore both a working deliverable and a proof of fit within that migration direction. Specific choices:
+
+- **Composition API (`<script setup>`)** — functions, computed values, and lifecycle hooks are plain TypeScript with no special framework concepts. This is idiomatic Vue 3 and aligns with the migration target.
+- **Composables** — `useVisitsData` encapsulates data fetching, polling, and cleanup. It is a thin, testable unit with a clear contract (reactive refs + `isLoading` + `error`), following the same pattern as Vue 3's own composables.
+- **Chart.js** — the most widely used charting library in the Vue ecosystem, with first-class TypeScript types and a simple imperative API that integrates cleanly with `onMounted`/`onUnmounted`.
+- **Tailwind CSS** (PostCSS, not CDN) — processed at build time so unused classes are purged. Custom design tokens (`forest`, `cream`, `leaf`) are defined once in `tailwind.config.js` and used consistently across all components.
+
+---
+
+## Why polling over WebSockets for the frontend
+
+WebSockets would be the natural choice if latency mattered (e.g., sub-second live updates). For a reforestation dashboard where the meaningful metric is visits-per-hour, a 10-second polling interval is indistinguishable from real-time and is significantly simpler:
+
+- No server-side connection management or heartbeat logic
+- No sticky-session requirement for horizontal scaling
+- Composable cleanup (`clearInterval` in `onUnmounted`) is a one-liner
+- Works through every proxy, CDN, and firewall with no configuration
+
+The 10-second interval was chosen as the midpoint between "feels live" and "doesn't spam the API". It can be tuned without any architectural change.
+
+---
+
+## What I would change at scale (10M+ visits/day)
+
+At 10M visits/day (~115 req/s average, with bursty peaks potentially 5–10×):
+
+1. **Migrate from SQLite to PostgreSQL** — SQLite's single-writer model becomes a bottleneck. Postgres supports true concurrent writes and connection pooling via PgBouncer.
+
+2. **Redis INCR for counters** — the visit counter increment (`total_visits + 1`) is a hot write. Redis `INCR` is atomic, in-memory, and handles hundreds of thousands of ops/second. The canonical count can be synced to Postgres on a schedule or on milestone events.
+
+3. **Event sourcing for the visits log** — rather than inserting each visit synchronously in the request path, publish to a message queue (Kafka, SQS). Consumers aggregate into time-series buckets and write to Postgres. The API becomes non-blocking for write acceptance.
+
+4. **Stateless API layer, horizontal scaling** — with Redis handling counters and Postgres for persistence, the Node.js API layer holds no local state. Multiple instances can run behind a load balancer with no sticky sessions.
+
+5. **Read replicas + caching** — the `GET /api/v1/visits/hourly` query runs a `GROUP BY` over a 24h window. At scale, this moves to a Postgres read replica with the result cached in Redis (TTL 30s). The dashboard composable would hit the cache, not the primary DB.
