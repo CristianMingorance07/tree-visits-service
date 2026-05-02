@@ -229,7 +229,7 @@ async function getDeviceFingerprint(): Promise<string> {
     `${screen.width}x${screen.height}x${screen.colorDepth}`,
     Intl.DateTimeFormat().resolvedOptions().timeZone,
     String(navigator.hardwareConcurrency ?? ''),
-    String((navigator as Record<string, unknown>).deviceMemory ?? ''),
+    String((navigator as unknown as Record<string, unknown>).deviceMemory ?? ''),
     String(navigator.maxTouchPoints ?? ''),
     navigator.platform ?? '',
   ].join('||');
