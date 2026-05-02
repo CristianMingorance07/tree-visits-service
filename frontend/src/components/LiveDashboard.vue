@@ -127,7 +127,7 @@
                 <span class="capitalize">{{ group.device.type }}</span>
               </div>
               <div v-if="group.country || group.language" class="flex items-center gap-1 text-[10px] text-gray-300 leading-none mt-0.5">
-                <span v-if="group.countryCode" class="text-[11px]">{{ countryFlag(group.countryCode) }}</span>
+                <img v-if="group.countryCode" :src="`https://flagcdn.com/16x12/${group.countryCode.toLowerCase()}.png`" :alt="group.country ?? ''" class="inline-block w-4 h-3 rounded-[2px] object-cover shrink-0" />
                 <span v-if="group.city || group.country">{{ group.city || group.country }}</span>
                 <template v-if="(group.city || group.country) && group.language">
                   <span class="text-gray-200">·</span>
@@ -167,7 +167,7 @@
                   🌐 {{ group.device.browser }}
                 </span>
                 <span v-if="group.country" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
-                  <span class="text-[10px]">{{ countryFlag(group.countryCode) }}</span>
+                  <img :src="`https://flagcdn.com/16x12/${group.countryCode?.toLowerCase()}.png`" :alt="group.country" class="inline-block w-4 h-3 rounded-[2px] object-cover" />
                   {{ group.city ? group.city + ', ' : '' }}{{ group.country }}
                 </span>
                 <span v-if="group.language" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
@@ -263,13 +263,6 @@ const deviceGroups = computed<DeviceGroup[]>(() => {
     (a, b) => new Date(b.lastVisit).getTime() - new Date(a.lastVisit).getTime()
   );
 });
-
-function countryFlag(code: string | null): string {
-  if (!code || code.length !== 2) return '🌐';
-  return [...code.toUpperCase()].map(c =>
-    String.fromCodePoint(c.charCodeAt(0) + 127397)
-  ).join('');
-}
 
 function toggle(customerId: string) {
   expanded.value[customerId] = !expanded.value[customerId];
