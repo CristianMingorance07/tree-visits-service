@@ -45,3 +45,30 @@ export interface CustomerListItem {
 export interface CustomersListResponse {
   customers: CustomerListItem[];
 }
+
+export interface DeviceInfo {
+  type: string;   // 'mobile' | 'tablet' | 'desktop'
+  os: string;
+  browser: string;
+}
+
+export interface RecentScan {
+  id: number;
+  customerId: string;
+  visitedAt: string;
+  device: DeviceInfo;
+}
+
+export interface RecentScansResponse {
+  scans: RecentScan[];
+}
+
+export interface ScanResult {
+  customerId: string;
+  totalVisits: number;
+  treesPlanted: number;
+  treeEarned: boolean;
+  lastSeen: string;
+  visitsUntilNextTree: number;
+  visitsPerTree: number;
+}

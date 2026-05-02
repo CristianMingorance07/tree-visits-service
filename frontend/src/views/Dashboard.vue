@@ -3,7 +3,7 @@
     <div class="max-w-5xl mx-auto px-4 py-10">
 
       <!-- Header -->
-      <header class="text-center mb-10 animate-fade-up">
+      <header class="text-center mb-8 animate-fade-up">
         <div class="flex justify-center mb-5">
           <div class="w-16 h-16 rounded-3xl bg-[#3aaa68] flex items-center justify-center shadow-lg shadow-[#3aaa68]/30">
             <svg class="w-9 h-9" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -32,6 +32,34 @@
         </Transition>
       </header>
 
+      <!-- Tab switcher -->
+      <div class="flex justify-center mb-8">
+        <div class="inline-flex rounded-2xl bg-gray-100 p-1 gap-0.5">
+          <button
+            @click="activeTab = 'demo'"
+            class="px-8 py-2 rounded-xl text-sm font-bold transition-all duration-200"
+            :class="activeTab === 'demo'
+              ? 'bg-white shadow text-gray-900'
+              : 'text-gray-400 hover:text-gray-600'"
+          >
+            Demo
+          </button>
+          <button
+            @click="activeTab = 'live'"
+            class="px-8 py-2 rounded-xl text-sm font-bold transition-all duration-200 flex items-center gap-2"
+            :class="activeTab === 'live'
+              ? 'bg-white shadow text-gray-900'
+              : 'text-gray-400 hover:text-gray-600'"
+          >
+            <span
+              v-if="recentScans.length"
+              class="w-1.5 h-1.5 rounded-full bg-[#3aaa68] animate-pulse"
+            />
+            Live
+          </button>
+        </div>
+      </div>
+
       <!-- Loading skeleton -->
       <Transition name="dashboard" mode="out-in">
         <div v-if="isLoading" key="loading">
@@ -57,51 +85,87 @@
           <p class="text-gray-400 text-sm font-mono">{{ error }}</p>
         </div>
 
-        <!-- Dashboard -->
+        <!-- Dashboard content -->
         <div v-else key="content" class="space-y-4">
 
-          <!-- Stats row -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatsCard
-              title="Visits (24 h)"
-              :value="totalVisits24h"
-              subtitle="in the last 24 hours"
-              icon="📈"
-            />
-            <StatsCard
-              title="Devices"
-              :value="totalCustomers"
-              subtitle="unique devices tracked"
-              icon="📡"
-            />
-            <StatsCard
-              title="Trees Planted"
-              :value="totalTreesPlanted"
-              subtitle="trees funded by visits"
-              icon="🌳"
-            />
-          </div>
+          <!-- Tab content -->
+          <Transition name="tab" mode="out-in">
 
-          <!-- Chart -->
-          <div class="card-accent p-6">
-            <div class="flex items-center justify-between mb-5">
-              <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">
-                Visit activity
-              </h2>
-              <span class="text-gray-300 text-[10px] font-mono">Last 24 hours · hourly</span>
+            <!-- DEMO TAB -->
+            <div v-if="activeTab === 'demo'" key="demo" class="space-y-4">
+
+              <!-- Demo stats -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StatsCard
+                  title="Visits (24 h)"
+                  :value="totalVisits24h"
+                  subtitle="simulated + real · last 24h"
+                  icon="📈"
+                />
+                <StatsCard
+                  title="Devices"
+                  :value="totalCustomers"
+                  subtitle="unique devices tracked"
+                  icon="📡"
+                />
+                <StatsCard
+                  title="Trees Planted"
+                  :value="totalTreesPlanted"
+                  subtitle="trees funded by visits"
+                  icon="🌳"
+                />
+              </div>
+
+              <div class="card-accent p-6">
+                <div class="flex items-center justify-between mb-5">
+                  <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">
+                    Visit activity
+                  </h2>
+                  <span class="text-gray-300 text-[10px] font-mono">Last 24 hours · hourly</span>
+                </div>
+                <VisitsChart :data="chartData" />
+              </div>
+
+              <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
+
+              <CustomerLeaderboard
+                :customers="customers"
+                :visits-per-tree="visitsPerTree"
+              />
             </div>
-            <VisitsChart :data="chartData" />
-          </div>
 
-          <!-- Leaderboard -->
-          <CustomerLeaderboard
-            :customers="customers"
-            :visits-per-tree="visitsPerTree"
-          />
+            <!-- LIVE TAB -->
+            <div v-else key="live" class="space-y-4">
 
-          <!-- Event simulator -->
-          <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
+              <!-- Live-only stats -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StatsCard
+                  title="Real Scans (24 h)"
+                  :value="liveVisits24h"
+                  subtitle="QR scans in the last 24h"
+                  icon="📲"
+                />
+                <StatsCard
+                  title="Real Devices"
+                  :value="liveDevices"
+                  subtitle="unique real-world devices"
+                  icon="📱"
+                />
+                <StatsCard
+                  title="Trees (real)"
+                  :value="liveTrees"
+                  subtitle="planted via real visits"
+                  icon="🌳"
+                />
+              </div>
 
+              <LiveDashboard
+                :scans="recentScans"
+                :visits-per-tree="visitsPerTree"
+              />
+            </div>
+
+          </Transition>
         </div>
       </Transition>
 
@@ -115,13 +179,17 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useVisitsData, POLL_INTERVAL_MS } from '../composables/useVisitsData';
 import StatsCard from '../components/StatsCard.vue';
 import VisitsChart from '../components/VisitsChart.vue';
 import CustomerLeaderboard from '../components/CustomerLeaderboard.vue';
 import EventSimulator from '../components/EventSimulator.vue';
+import LiveDashboard from '../components/LiveDashboard.vue';
 import LiveIndicator from '../components/LiveIndicator.vue';
 import SkeletonCard from '../components/SkeletonCard.vue';
+
+const activeTab = ref<'demo' | 'live'>('demo');
 
 const {
   chartData,
@@ -130,6 +198,10 @@ const {
   totalCustomers,
   visitsPerTree,
   customers,
+  recentScans,
+  liveVisits24h,
+  liveDevices,
+  liveTrees,
   isLoading,
   error,
   lastUpdated,
@@ -155,5 +227,15 @@ const {
 .dashboard-leave-to {
   opacity: 0;
   transform: translateY(12px);
+}
+
+.tab-enter-active,
+.tab-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.tab-enter-from,
+.tab-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

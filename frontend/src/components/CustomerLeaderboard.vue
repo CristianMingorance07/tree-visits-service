@@ -111,19 +111,26 @@
               alt="QR code"
               class="w-24 h-24 rounded-lg border border-gray-100 shrink-0"
             />
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <p class="text-[11px] font-bold text-gray-700 mb-1">Scan to record a real visit</p>
               <p class="text-[10px] text-gray-400 mb-2 leading-relaxed">
-                Scan this QR code with any device on the same network. Each scan sends a real
-                <span class="font-mono">POST /api/v1/visits</span> to the API.
+                Any device that scans this registers a real visit via
+                <span class="font-mono">GET /api/v1/visits/scan/:id</span>.
+                Share the link to test from anywhere.
               </p>
-              <a
-                :href="scanUrl(customer.customerId)"
-                target="_blank"
-                class="text-[10px] font-mono text-[#3aaa68] break-all hover:underline"
-              >
+              <p class="text-[10px] font-mono text-[#3aaa68] break-all mb-3">
                 {{ scanUrl(customer.customerId) }}
-              </a>
+              </p>
+              <button
+                @click="share(customer.customerId)"
+                class="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all duration-200
+                       border-[#3aaa68]/30 text-[#3aaa68] bg-[#3aaa68]/8 hover:bg-[#3aaa68]/15 active:scale-95"
+              >
+                <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M12 2.667a1.333 1.333 0 1 0 0 2.666 1.333 1.333 0 0 0 0-2.666zM9.333 4A2.667 2.667 0 1 1 12 8a2.662 2.662 0 0 1-1.676-.592L6.588 9.512a2.68 2.68 0 0 1 0 .976l3.736 2.104A2.667 2.667 0 1 1 9.333 14a2.662 2.662 0 0 1 .341-1.322L5.938 10.574a2.667 2.667 0 1 1 0-5.148L9.674 7.53A2.663 2.663 0 0 1 9.333 6z"/>
+                </svg>
+                {{ copied === customer.customerId ? '✓ Link copied!' : 'Share link' }}
+              </button>
             </div>
           </div>
         </Transition>
@@ -156,9 +163,10 @@ const gridStyle = { gridTemplateColumns: '1fr 72px 54px 52px 40px' };
 
 const activeQr = ref<string | null>(null);
 const qrCache = ref<Record<string, string>>({});
+const copied = ref<string | null>(null);
 
 function scanUrl(customerId: string): string {
-  return `${window.location.origin}/api/v1/visits/scan/${encodeURIComponent(customerId)}`;
+  return `${window.location.origin}/track?id=${encodeURIComponent(customerId)}`;
 }
 
 async function generateQr(customerId: string) {
@@ -180,6 +188,17 @@ function toggleQr(customerId: string) {
   } else {
     activeQr.value = customerId;
     generateQr(customerId);
+  }
+}
+
+async function share(customerId: string) {
+  const url = scanUrl(customerId);
+  if (navigator.share) {
+    await navigator.share({ title: `Visit tracker · ${customerId}`, url }).catch(() => null);
+  } else {
+    await navigator.clipboard.writeText(url);
+    copied.value = customerId;
+    setTimeout(() => { copied.value = null; }, 2000);
   }
 }
 

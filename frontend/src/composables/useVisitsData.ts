@@ -7,12 +7,20 @@ import type {
   ConfigResponse,
   CustomerListItem,
   CustomersListResponse,
+  RecentScan,
+  RecentScansResponse,
 } from '../types/api';
 
-export type { HourlyDataPoint, CustomerListItem };
+export type { HourlyDataPoint, CustomerListItem, RecentScan };
 export const POLL_INTERVAL_MS = 10_000;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'error';
+
+interface LiveStatsResponse {
+  realVisits24h: number;
+  realDevices: number;
+  realTrees: number;
+}
 
 export function useVisitsData() {
   const chartData = ref<HourlyDataPoint[]>([]);
@@ -22,6 +30,10 @@ export function useVisitsData() {
   const totalVisits = ref(0);
   const visitsPerTree = ref(10);
   const customers = ref<CustomerListItem[]>([]);
+  const recentScans = ref<RecentScan[]>([]);
+  const liveVisits24h = ref(0);
+  const liveDevices = ref(0);
+  const liveTrees = ref(0);
   const isLoading = ref(true);
   const error = ref<string | null>(null);
   const lastUpdated = ref<Date | null>(null);
@@ -32,11 +44,13 @@ export function useVisitsData() {
 
   async function fetchData() {
     try {
-      const [hourly, stats, config, customerList] = await Promise.all([
+      const [hourly, stats, config, customerList, recent, liveStats] = await Promise.all([
         apiFetch<HourlyResponse>('/api/v1/visits/hourly'),
         apiFetch<StatsResponse>('/api/v1/stats'),
         apiFetch<ConfigResponse>('/api/v1/config'),
         apiFetch<CustomersListResponse>('/api/v1/customers'),
+        apiFetch<RecentScansResponse>('/api/v1/visits/recent'),
+        apiFetch<LiveStatsResponse>('/api/v1/stats/live'),
       ]);
 
       chartData.value = hourly.data;
@@ -46,6 +60,10 @@ export function useVisitsData() {
       totalVisits.value = stats.totalVisits;
       visitsPerTree.value = config.visitsPerTree;
       customers.value = customerList.customers;
+      recentScans.value = recent.scans;
+      liveVisits24h.value = liveStats.realVisits24h;
+      liveDevices.value = liveStats.realDevices;
+      liveTrees.value = liveStats.realTrees;
       error.value = null;
       lastUpdated.value = new Date();
       failCount = 0;
@@ -76,6 +94,10 @@ export function useVisitsData() {
     totalVisits,
     visitsPerTree,
     customers,
+    recentScans,
+    liveVisits24h,
+    liveDevices,
+    liveTrees,
     isLoading,
     error,
     lastUpdated,
