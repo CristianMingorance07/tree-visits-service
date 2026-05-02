@@ -65,9 +65,9 @@ export async function buildServer() {
   // Serve bundled frontend when running as a single container (cloud deployment)
   const publicDir = join(__dirname, '..', 'public');
   if (existsSync(publicDir)) {
-    await fastify.register(staticFiles, { root: publicDir, prefix: '/', decorateReply: false });
+    await fastify.register(staticFiles, { root: publicDir, prefix: '/' });
     fastify.setNotFoundHandler((_request, reply) => {
-      reply.sendFile('index.html', publicDir);
+      reply.sendFile('index.html');
     });
   }
 
