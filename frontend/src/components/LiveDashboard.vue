@@ -127,7 +127,7 @@
                 <span class="capitalize">{{ group.device.type }}</span>
               </div>
               <div v-if="group.country || group.language" class="flex items-center gap-1 text-[10px] text-gray-300 leading-none mt-0.5">
-                <img v-if="group.countryCode" :src="`https://flagcdn.com/16x12/${group.countryCode.toLowerCase()}.png`" :alt="group.country ?? ''" class="inline-block w-4 h-3 rounded-[2px] object-cover shrink-0" />
+                <img v-if="group.countryCode" :src="`https://flagcdn.com/16x12/${group.countryCode.toLowerCase()}.png`" :alt="group.country ?? ''" class="inline-block w-4 h-3 rounded-[2px] object-cover shrink-0" @error="($event.target as HTMLImageElement).style.display='none'" />
                 <span v-if="group.city || group.country">{{ group.city || group.country }}</span>
                 <template v-if="(group.city || group.country) && group.language">
                   <span class="text-gray-200">·</span>
@@ -167,7 +167,7 @@
                   🌐 {{ group.device.browser }}
                 </span>
                 <span v-if="group.country" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
-                  <img :src="`https://flagcdn.com/16x12/${group.countryCode?.toLowerCase()}.png`" :alt="group.country" class="inline-block w-4 h-3 rounded-[2px] object-cover" />
+                  <img :src="`https://flagcdn.com/16x12/${group.countryCode?.toLowerCase()}.png`" :alt="group.country" class="inline-block w-4 h-3 rounded-[2px] object-cover" @error="($event.target as HTMLImageElement).style.display='none'" />
                   {{ group.city ? group.city + ', ' : '' }}{{ group.country }}
                 </span>
                 <span v-if="group.language" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
