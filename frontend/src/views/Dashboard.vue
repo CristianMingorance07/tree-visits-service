@@ -129,7 +129,7 @@
               <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
 
               <CustomerLeaderboard
-                :customers="customers"
+                :customers="demoCustomers"
                 :visits-per-tree="visitsPerTree"
               />
             </div>
@@ -163,6 +163,12 @@
                 :scans="recentScans"
                 :visits-per-tree="visitsPerTree"
               />
+
+              <CustomerLeaderboard
+                v-if="liveCustomers.length"
+                :customers="liveCustomers"
+                :visits-per-tree="visitsPerTree"
+              />
             </div>
 
           </Transition>
@@ -179,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useVisitsData, POLL_INTERVAL_MS } from '../composables/useVisitsData';
 import StatsCard from '../components/StatsCard.vue';
 import VisitsChart from '../components/VisitsChart.vue';
@@ -190,6 +196,13 @@ import LiveIndicator from '../components/LiveIndicator.vue';
 import SkeletonCard from '../components/SkeletonCard.vue';
 
 const activeTab = ref<'demo' | 'live'>('demo');
+
+const demoCustomers = computed(() =>
+  customers.value.filter(c => c.customerId.startsWith('device-store-'))
+);
+const liveCustomers = computed(() =>
+  customers.value.filter(c => !c.customerId.startsWith('device-store-'))
+);
 
 const {
   chartData,
