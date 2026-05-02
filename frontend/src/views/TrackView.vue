@@ -201,9 +201,9 @@ const deviceId = ref('');
 const animatedOffset = ref(326.7);
 
 // ─── Cooldown: minimum interval between counted visits ─────────────────────
-// Prevents the same physical visit from being counted multiple times if the
-// user refreshes or re-opens the browser shortly after. Tune per use-case.
-const VISIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+// In production set this to the minimum time between legitimate store visits,
+// e.g. 8 * 60 * 60 * 1000 (8 h). Set to 0 to disable (demo / evaluation).
+const VISIT_COOLDOWN_MS = 0;
 
 // ─── Device fingerprinting ─────────────────────────────────────────────────
 // Derives a deterministic ID from stable browser/hardware signals using
