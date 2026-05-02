@@ -1,8 +1,15 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../lib/api';
-import type { HourlyDataPoint, HourlyResponse, StatsResponse, ConfigResponse } from '../types/api';
+import type {
+  HourlyDataPoint,
+  HourlyResponse,
+  StatsResponse,
+  ConfigResponse,
+  CustomerListItem,
+  CustomersListResponse,
+} from '../types/api';
 
-export type { HourlyDataPoint };
+export type { HourlyDataPoint, CustomerListItem };
 export const POLL_INTERVAL_MS = 10_000;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'error';
@@ -14,6 +21,7 @@ export function useVisitsData() {
   const totalCustomers = ref(0);
   const totalVisits = ref(0);
   const visitsPerTree = ref(10);
+  const customers = ref<CustomerListItem[]>([]);
   const isLoading = ref(true);
   const error = ref<string | null>(null);
   const lastUpdated = ref<Date | null>(null);
@@ -24,10 +32,11 @@ export function useVisitsData() {
 
   async function fetchData() {
     try {
-      const [hourly, stats, config] = await Promise.all([
+      const [hourly, stats, config, customerList] = await Promise.all([
         apiFetch<HourlyResponse>('/api/v1/visits/hourly'),
         apiFetch<StatsResponse>('/api/v1/stats'),
         apiFetch<ConfigResponse>('/api/v1/config'),
+        apiFetch<CustomersListResponse>('/api/v1/customers'),
       ]);
 
       chartData.value = hourly.data;
@@ -36,6 +45,7 @@ export function useVisitsData() {
       totalCustomers.value = stats.totalCustomers;
       totalVisits.value = stats.totalVisits;
       visitsPerTree.value = config.visitsPerTree;
+      customers.value = customerList.customers;
       error.value = null;
       lastUpdated.value = new Date();
       failCount = 0;
@@ -65,9 +75,11 @@ export function useVisitsData() {
     totalCustomers,
     totalVisits,
     visitsPerTree,
+    customers,
     isLoading,
     error,
     lastUpdated,
     connectionStatus,
+    refresh: fetchData,
   };
 }

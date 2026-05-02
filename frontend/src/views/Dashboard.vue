@@ -1,19 +1,35 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <div class="max-w-5xl mx-auto px-4 py-12">
+  <div class="min-h-screen bg-[#f8faf9]">
+    <div class="max-w-5xl mx-auto px-4 py-10">
 
-      <!-- Header — matches Tree-Nation's bold black headline style -->
-      <header class="text-center mb-12 animate-fade-up">
-        <div
-          class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#65D693]/15 border border-[#65D693]/30 mb-6 text-3xl"
-          aria-hidden="true"
-        >🌱</div>
+      <!-- Header -->
+      <header class="text-center mb-10 animate-fade-up">
+        <div class="flex justify-center mb-5">
+          <div class="w-16 h-16 rounded-3xl bg-[#3aaa68] flex items-center justify-center shadow-lg shadow-[#3aaa68]/30">
+            <svg class="w-9 h-9" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 1L1 18.5H9.5L3 30H13V43H23V30H33L26.5 18.5H35L18 1Z" fill="white" fill-rule="evenodd"/>
+            </svg>
+          </div>
+        </div>
         <h1 class="text-4xl font-black text-gray-900 tracking-tight leading-none mb-3">
-          X Visits =&nbsp;<span class="text-brand-gradient">1 Tree</span>
+          X Visits&nbsp;=&nbsp;<span class="text-brand-gradient">1 Tree</span>
         </h1>
-        <p class="text-gray-500 text-base font-medium">
+        <p class="text-gray-400 text-sm font-medium mb-4">
           Real-time reforestation tracker &middot; Tree-Nation
         </p>
+        <Transition name="badge">
+          <div
+            v-if="visitsPerTree > 0"
+            class="inline-flex items-center gap-1.5 bg-[#3aaa68]/10 border border-[#3aaa68]/20
+                   text-[#3aaa68] text-xs font-semibold px-3.5 py-1.5 rounded-full"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+              <circle cx="6" cy="6" r="5" fill="currentColor" opacity="0.2"/>
+              <circle cx="6" cy="6" r="2.5" fill="currentColor"/>
+            </svg>
+            Every {{ visitsPerTree }} visits plants 1 tree
+          </div>
+        </Transition>
       </header>
 
       <!-- Loading skeleton -->
@@ -22,14 +38,12 @@
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <SkeletonCard v-for="i in 3" :key="i" />
           </div>
-          <div class="card p-6 mb-4 h-72">
+          <div class="card p-6 mb-4 h-64">
             <div class="skeleton h-3 w-32 mb-6" />
-            <div class="skeleton h-48" />
+            <div class="skeleton h-44" />
           </div>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SkeletonCard />
-            <SkeletonCard />
-          </div>
+          <SkeletonCard class="mb-4 h-64" />
+          <SkeletonCard class="h-64" />
         </div>
 
         <!-- Hard error -->
@@ -55,10 +69,10 @@
               icon="📈"
             />
             <StatsCard
-              title="Customers"
+              title="Devices"
               :value="totalCustomers"
               subtitle="unique devices tracked"
-              icon="👤"
+              icon="📡"
             />
             <StatsCard
               title="Trees Planted"
@@ -72,25 +86,29 @@
           <div class="card-accent p-6">
             <div class="flex items-center justify-between mb-5">
               <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">
-                Hourly activity
+                Visit activity
               </h2>
-              <span class="text-gray-400 text-xs">Last 24 hours</span>
+              <span class="text-gray-300 text-[10px] font-mono">Last 24 hours · hourly</span>
             </div>
             <VisitsChart :data="chartData" />
           </div>
 
-          <!-- Tree counter + Customer lookup -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <TreeCounter :total-trees-planted="totalTreesPlanted" />
-            <CustomerLookup />
-          </div>
+          <!-- Leaderboard -->
+          <CustomerLeaderboard
+            :customers="customers"
+            :visits-per-tree="visitsPerTree"
+          />
+
+          <!-- Event simulator -->
+          <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
+
         </div>
       </Transition>
 
       <!-- Footer -->
       <footer class="mt-10 pt-5 border-t border-gray-100 flex items-center justify-between">
         <LiveIndicator :status="connectionStatus" :last-updated="lastUpdated" />
-        <span class="text-gray-300 text-xs">Refreshes every {{ POLL_INTERVAL_MS / 1000 }}s</span>
+        <span class="text-gray-300 text-[10px] font-mono">Auto-refresh every {{ POLL_INTERVAL_MS / 1000 }}s</span>
       </footer>
     </div>
   </div>
@@ -100,8 +118,8 @@
 import { useVisitsData, POLL_INTERVAL_MS } from '../composables/useVisitsData';
 import StatsCard from '../components/StatsCard.vue';
 import VisitsChart from '../components/VisitsChart.vue';
-import TreeCounter from '../components/TreeCounter.vue';
-import CustomerLookup from '../components/CustomerLookup.vue';
+import CustomerLeaderboard from '../components/CustomerLeaderboard.vue';
+import EventSimulator from '../components/EventSimulator.vue';
 import LiveIndicator from '../components/LiveIndicator.vue';
 import SkeletonCard from '../components/SkeletonCard.vue';
 
@@ -110,14 +128,25 @@ const {
   totalVisits24h,
   totalTreesPlanted,
   totalCustomers,
+  visitsPerTree,
+  customers,
   isLoading,
   error,
   lastUpdated,
   connectionStatus,
+  refresh,
 } = useVisitsData();
 </script>
 
 <style scoped>
+.badge-enter-active {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.badge-enter-from {
+  opacity: 0;
+  transform: translateY(4px) scale(0.95);
+}
+
 .dashboard-enter-active,
 .dashboard-leave-active {
   transition: opacity 0.35s ease, transform 0.35s ease;

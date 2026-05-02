@@ -1,10 +1,14 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import staticFiles from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { config } from './config';
 import { runMigrations } from './db/migrations';
+import { seedDemoData, resetAndSeed } from './db/seed';
 import { visitsRoutes } from './routes/visits';
 import { customersRoutes } from './routes/customers';
 import { configRoutes } from './routes/config';
@@ -18,9 +22,13 @@ export async function buildServer() {
   });
 
   await fastify.register(rateLimit, {
-    max: 100,
+    max: 300,
     timeWindow: '1 minute',
-    errorResponseBuilder: () => ({ error: 'Too many requests — slow down' }),
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Retry in ${context.after}.`,
+    }),
   });
 
   fastify.get('/health', { config: { rateLimit: false } }, async (_request, reply) => {
@@ -54,6 +62,20 @@ export async function buildServer() {
   await fastify.register(customersRoutes);
   await fastify.register(configRoutes);
 
+  // Serve bundled frontend when running as a single container (cloud deployment)
+  const publicDir = join(__dirname, '..', 'public');
+  if (existsSync(publicDir)) {
+    await fastify.register(staticFiles, { root: publicDir, prefix: '/', decorateReply: false });
+    fastify.setNotFoundHandler((_request, reply) => {
+      reply.sendFile('index.html', publicDir);
+    });
+  }
+
+  fastify.post('/api/v1/reset', async (_request, reply) => {
+    resetAndSeed();
+    return reply.send({ ok: true, message: 'Demo data reset successfully' });
+  });
+
   fastify.setErrorHandler((error, _request, reply) => {
     if (error.validation) {
       return reply.status(400).send({ error: 'Validation error', details: error.message });
@@ -67,6 +89,7 @@ export async function buildServer() {
 
 async function main() {
   runMigrations();
+  seedDemoData();
   const fastify = await buildServer();
 
   const shutdown = async () => {

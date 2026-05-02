@@ -25,3 +25,23 @@ export interface CustomerResponse {
   lastSeen: string;
   visitsUntilNextTree: number;
 }
+
+export interface VisitResponse {
+  customerId: string;
+  totalVisits: number;
+  treesPlanted: number;
+  treeEarned: boolean;
+  lastSeen: string;
+}
+
+export interface CustomerListItem {
+  customerId: string;
+  totalVisits: number;
+  treesPlanted: number;
+  lastSeen: string;
+  visitsUntilNextTree: number;
+}
+
+export interface CustomersListResponse {
+  customers: CustomerListItem[];
+}
