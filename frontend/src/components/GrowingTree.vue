@@ -59,9 +59,6 @@ const props = defineProps<{
   totalTreesPlanted: number;
 }>();
 
-/* ------------------------------------------------------------------ */
-/* Stage definitions                                                    */
-/* ------------------------------------------------------------------ */
 const STAGES = [
   { minVisits: 0,   label: 'Sprout',      depth: 0 },
   { minVisits: 10,  label: 'Sapling',     depth: 1 },
@@ -100,9 +97,6 @@ const skyGradient = computed(() => {
   return `linear-gradient(175deg, ${top} 0%, ${bottom} 100%)`;
 });
 
-/* ------------------------------------------------------------------ */
-/* Canvas + drawing                                                     */
-/* ------------------------------------------------------------------ */
 const canvasEl    = ref<HTMLCanvasElement | null>(null);
 const levelUpFlash = ref(false);
 
@@ -123,7 +117,6 @@ function makePrng(seed: number) {
 
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
 
-/* Color helpers */
 function lerpHex(a: string, b: string, t: number): string {
   const ah = parseInt(a.slice(1), 16);
   const bh = parseInt(b.slice(1), 16);
@@ -140,7 +133,6 @@ function branchColor(depth: number, maxDepth: number): string {
   return lerpHex('#2A0F00', '#7C4B1B', Math.min(1, t * 1.4));
 }
 
-/* Draw a tapered, slightly-curved branch segment */
 function drawBranch(
   ctx: CanvasRenderingContext2D,
   rng: () => number,
@@ -160,7 +152,6 @@ function drawBranch(
   const x2 = x1 + Math.cos(angle) * eff;
   const y2 = y1 + Math.sin(angle) * eff;
 
-  // Control point for a gentle natural curve
   const cpX = (x1 + x2) / 2 + Math.cos(angle + Math.PI / 2) * (eff * 0.08 * (rng() - 0.5) * 6);
   const cpY = (y1 + y2) / 2 + Math.sin(angle + Math.PI / 2) * (eff * 0.08);
 
@@ -168,11 +159,9 @@ function drawBranch(
   const topW  = Math.max(0.7, 12 - depth * 2 + (rng() - 0.5));
   const baseW = topW * 1.35;
 
-  // Draw as filled tapered shape for trunk/main branches
   if (depth <= 3 && topW > 2) {
     drawTaperedSegment(ctx, x1, y1, x2, y2, cpX, cpY, baseW, topW, depth, maxDepth, rng);
   } else {
-    // Thin branches: simple stroked bezier
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.quadraticCurveTo(cpX, cpY, x2, y2);
@@ -182,13 +171,11 @@ function drawBranch(
     ctx.stroke();
   }
 
-  // Leaf clusters at branch endpoints
   if (depth >= maxDepth - 1 && maxDepth >= 3) {
     const leafOpacity = depth === maxDepth ? progress : 1;
     drawLeaves(ctx, x2, y2, maxDepth, rng, leafOpacity);
   }
 
-  // Recurse into child branches
   if (depth < maxDepth) {
     const spread = 0.38 + (rng() - 0.5) * 0.08;
     const ratio  = 0.66 + rng() * 0.07;
@@ -203,7 +190,6 @@ function drawBranch(
   }
 }
 
-/* Tapered filled branch with cylindrical gradient */
 function drawTaperedSegment(
   ctx: CanvasRenderingContext2D,
   x1: number, y1: number,
@@ -239,7 +225,6 @@ function drawTaperedSegment(
   ctx.fill();
 }
 
-/* Leaf cluster: radial gradient blobs */
 function drawLeaves(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,
@@ -271,7 +256,6 @@ function drawLeaves(
   ctx.globalAlpha = 1;
 }
 
-/* Roots at high stages */
 function drawRoots(ctx: CanvasRenderingContext2D, x: number, y: number, stage: number) {
   const rng = makePrng(999);
   const numRoots = stage - 3;
@@ -291,7 +275,6 @@ function drawRoots(ctx: CanvasRenderingContext2D, x: number, y: number, stage: n
   }
 }
 
-/* Tiny sprout for stage 0 */
 function drawSprout(ctx: CanvasRenderingContext2D, cx: number, ground: number) {
   const h = 18;
   ctx.beginPath();

@@ -29,7 +29,6 @@ export function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_visits_visited_at ON visits(visited_at);
   `);
 
-  // Migration 2: device-tracking columns (safe on existing DBs)
   for (const col of [
     'ALTER TABLE visits ADD COLUMN user_agent TEXT',
     'ALTER TABLE visits ADD COLUMN ip TEXT',
@@ -37,7 +36,6 @@ export function runMigrations(): void {
     try { db.exec(col); } catch { /* already exists */ }
   }
 
-  // Migration 3: geo + language enrichment (async, populated after scan)
   for (const col of [
     'ALTER TABLE visits ADD COLUMN country TEXT',
     'ALTER TABLE visits ADD COLUMN country_code TEXT',

@@ -80,7 +80,6 @@
           <div class="w-20 h-20 rounded-[28px] bg-[#3aaa68] flex items-center justify-center mx-auto mb-5 shadow-lg shadow-[#3aaa68]/30">
             <TreeIcon class="w-11 h-11 text-white" />
           </div>
-          <!-- First visit vs returning -->
           <div v-if="result.totalVisits === 1">
             <h1 class="text-2xl font-black text-gray-900 mb-1">Welcome! 🌱</h1>
             <p class="text-gray-400 text-sm">Your first visit has been recorded</p>
@@ -200,29 +199,24 @@ const cooldownMsg = ref('');
 const deviceId = ref('');
 const animatedOffset = ref(326.7);
 
-// ─── Cooldown: minimum interval between counted visits ─────────────────────
-// In production set this to the minimum time between legitimate store visits,
-// e.g. 8 * 60 * 60 * 1000 (8 h). Set to 0 to disable (demo / evaluation).
+// 0 disables the cooldown; set to e.g. 8 * 3600_000 for real deployments.
 const VISIT_COOLDOWN_MS = 0;
 
-// ─── Device fingerprinting ─────────────────────────────────────────────────
-// Derives a deterministic ID from stable browser/hardware signals using
-// SHA-256. The resulting hash is stable across sessions on the same device,
-// so clearing localStorage does NOT lose the visitor's history.
-// localStorage acts only as a fast cache to avoid recomputing on every visit.
+// SHA-256 of stable browser signals → consistent identity across sessions.
+// localStorage is a fast-path cache only; clearing it does not lose history
+// because the hash recomputes to the same value on the same device.
 async function getDeviceFingerprint(): Promise<string> {
-  // (1) Admin-generated per-device QR overrides everything
-  const fromQuery = route.query.id as string | undefined;
-  if (fromQuery) {
-    localStorage.setItem('tree_device_id', fromQuery);
+  const fromQuery = (route.query.id as string | undefined)?.trim();
+  if (fromQuery && fromQuery.length > 0 && fromQuery.length <= 200) {
+    try { localStorage.setItem('tree_device_id', fromQuery); } catch { /* private browsing */ }
     return fromQuery;
   }
 
-  // (2) Fast path: cached fingerprint already in localStorage
-  const cached = localStorage.getItem('tree_device_id');
-  if (cached) return cached;
+  try {
+    const cached = localStorage.getItem('tree_device_id');
+    if (cached) return cached;
+  } catch { /* private browsing — recompute each visit */ }
 
-  // (3) Compute fingerprint from stable, device-specific signals
   const signals = [
     navigator.userAgent,
     navigator.language,
@@ -234,21 +228,15 @@ async function getDeviceFingerprint(): Promise<string> {
     navigator.platform ?? '',
   ].join('||');
 
-  const hashBuffer = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(signals),
-  );
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(signals));
   const hex = Array.from(new Uint8Array(hashBuffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-
-  // Format as fp-xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx (visually distinct in admin)
   const fp = `fp-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 28)}`;
-  localStorage.setItem('tree_device_id', fp);
+  try { localStorage.setItem('tree_device_id', fp); } catch { /* private browsing */ }
   return fp;
 }
 
-// ─── Computed ──────────────────────────────────────────────────────────────
 const cycleVisits = computed(() => {
   if (!result.value) return 0;
   return result.value.visitsPerTree - result.value.visitsUntilNextTree;
@@ -259,7 +247,6 @@ const progressPct = computed(() => {
   return Math.min(100, Math.max(2, (cycleVisits.value / result.value.visitsPerTree) * 100));
 });
 
-// ─── Main flow ─────────────────────────────────────────────────────────────
 async function recordVisit() {
   state.value = 'loading';
   animatedOffset.value = 326.7;
@@ -268,13 +255,12 @@ async function recordVisit() {
     const id = await getDeviceFingerprint();
     deviceId.value = id;
 
-    // Cooldown check: avoid double-counting within the same physical visit
     const cooldownKey = `tree_last_visit_${id}`;
-    const lastVisitTs = localStorage.getItem(cooldownKey);
+    let lastVisitTs: string | null = null;
+    try { lastVisitTs = localStorage.getItem(cooldownKey); } catch { /* private browsing */ }
     const now = Date.now();
 
     if (lastVisitTs && now - parseInt(lastVisitTs, 10) < VISIT_COOLDOWN_MS) {
-      // Within cooldown — fetch current stats without registering a new visit
       cooldownMsg.value = formatElapsed(now - parseInt(lastVisitTs, 10));
       const statsRes = await fetch(`/api/v1/customers/${encodeURIComponent(id)}`);
       if (statsRes.ok) {
@@ -283,7 +269,6 @@ async function recordVisit() {
           lastSeen: string; visitsUntilNextTree: number;
         };
         result.value = { ...customer, treeEarned: false, visitsPerTree: 10 };
-        // Get real visitsPerTree from config
         const cfgRes = await fetch('/api/v1/config');
         if (cfgRes.ok) {
           const cfg = await cfgRes.json() as { visitsPerTree: number };
@@ -294,13 +279,11 @@ async function recordVisit() {
       return;
     }
 
-    // Register visit
     const res = await fetch(`/api/v1/visits/scan/${encodeURIComponent(id)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     result.value = await res.json() as ScanResult;
 
-    // Persist cooldown timestamp after successful registration
-    localStorage.setItem(cooldownKey, String(now));
+    try { localStorage.setItem(cooldownKey, String(now)); } catch { /* private browsing */ }
 
     state.value = 'success';
 
@@ -334,7 +317,6 @@ function formatElapsed(ms: number): string {
 
 onMounted(recordVisit);
 
-// ─── Inline component ──────────────────────────────────────────────────────
 const TreeIcon = defineComponent({
   inheritAttrs: false,
   setup(_, { attrs }) {
