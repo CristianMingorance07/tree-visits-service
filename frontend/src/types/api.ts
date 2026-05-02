@@ -58,6 +58,10 @@ export interface RecentScan {
   customerId: string;
   visitedAt: string;
   device: DeviceInfo;
+  country: string | null;
+  countryCode: string | null;
+  city: string | null;
+  language: string | null;
 }
 
 export interface RecentScansResponse {

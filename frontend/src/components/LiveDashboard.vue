@@ -126,6 +126,14 @@
                 <span class="text-gray-200">·</span>
                 <span class="capitalize">{{ group.device.type }}</span>
               </div>
+              <div v-if="group.country || group.language" class="flex items-center gap-1 text-[10px] text-gray-300 leading-none mt-0.5">
+                <span v-if="group.countryCode" class="text-[11px]">{{ countryFlag(group.countryCode) }}</span>
+                <span v-if="group.city || group.country">{{ group.city || group.country }}</span>
+                <template v-if="(group.city || group.country) && group.language">
+                  <span class="text-gray-200">·</span>
+                </template>
+                <span v-if="group.language">{{ group.language }}</span>
+              </div>
             </div>
 
             <!-- Visit count badge -->
@@ -149,6 +157,26 @@
           <!-- Expanded visit list -->
           <Transition name="expand">
             <div v-if="expanded[group.customerId]" class="border-t border-gray-100 bg-[#f8faf9]">
+              <!-- Device detail strip -->
+              <div class="px-4 pt-3 pb-2 flex flex-wrap gap-x-3 gap-y-1 border-b border-gray-100/80">
+                <span class="inline-flex items-center gap-1 text-[9px] text-gray-400">
+                  <span class="text-[10px]">{{ deviceIcon(group.device.type) }}</span>
+                  {{ group.device.brand ? group.device.brand + ' · ' : '' }}{{ group.device.os }}
+                </span>
+                <span class="inline-flex items-center gap-1 text-[9px] text-gray-400">
+                  🌐 {{ group.device.browser }}
+                </span>
+                <span v-if="group.country" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
+                  <span class="text-[10px]">{{ countryFlag(group.countryCode) }}</span>
+                  {{ group.city ? group.city + ', ' : '' }}{{ group.country }}
+                </span>
+                <span v-if="group.language" class="inline-flex items-center gap-1 text-[9px] text-gray-400">
+                  💬 {{ group.language }}
+                </span>
+                <span class="inline-flex items-center gap-1 text-[9px] text-gray-300 font-mono">
+                  🔑 {{ group.customerId.slice(0, 16) }}…
+                </span>
+              </div>
               <div class="px-4 py-2">
                 <p class="text-[9px] font-bold uppercase tracking-widest text-gray-300 mb-2">Visit history</p>
                 <div class="space-y-0">
@@ -197,6 +225,10 @@ const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
 interface DeviceGroup {
   customerId: string;
   device: RecentScan['device'];
+  country: string | null;
+  countryCode: string | null;
+  city: string | null;
+  language: string | null;
   visits: { id: number; visitedAt: string }[];
   lastVisit: string;
 }
@@ -208,9 +240,22 @@ const deviceGroups = computed<DeviceGroup[]>(() => {
       map.set(scan.customerId, {
         customerId: scan.customerId,
         device: scan.device,
+        country: scan.country,
+        countryCode: scan.countryCode,
+        city: scan.city,
+        language: scan.language,
         visits: [],
         lastVisit: scan.visitedAt,
       });
+    } else {
+      // Update geo from most recent scan that has it
+      const g = map.get(scan.customerId)!;
+      if (!g.country && scan.country) {
+        g.country = scan.country;
+        g.countryCode = scan.countryCode;
+        g.city = scan.city;
+        g.language = scan.language;
+      }
     }
     map.get(scan.customerId)!.visits.push({ id: scan.id, visitedAt: scan.visitedAt });
   }
@@ -218,6 +263,13 @@ const deviceGroups = computed<DeviceGroup[]>(() => {
     (a, b) => new Date(b.lastVisit).getTime() - new Date(a.lastVisit).getTime()
   );
 });
+
+function countryFlag(code: string | null): string {
+  if (!code || code.length !== 2) return '🌐';
+  return [...code.toUpperCase()].map(c =>
+    String.fromCodePoint(c.charCodeAt(0) + 127397)
+  ).join('');
+}
 
 function toggle(customerId: string) {
   expanded.value[customerId] = !expanded.value[customerId];

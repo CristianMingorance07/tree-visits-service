@@ -2,6 +2,7 @@ import { getDb } from '../db';
 import { toISO } from '../utils/date';
 
 export interface VisitResult {
+  visitId: number;
   customerId: string;
   totalVisits: number;
   treesPlanted: number;
@@ -42,7 +43,7 @@ export function registerVisit(customerId: string, meta?: VisitMeta): VisitResult
         last_seen = datetime('now')
     `).run(id);
 
-    db.prepare(
+    const { lastInsertRowid } = db.prepare(
       `INSERT INTO visits (customer_id, visited_at, user_agent, ip) VALUES (?, datetime('now'), ?, ?)`,
     ).run(id, meta?.userAgent ?? null, meta?.ip ?? null);
 
@@ -66,6 +67,7 @@ export function registerVisit(customerId: string, meta?: VisitMeta): VisitResult
     }
 
     return {
+      visitId: Number(lastInsertRowid),
       customerId: id,
       totalVisits: customer.total_visits,
       treesPlanted: treeEarned ? customer.trees_planted + 1 : customer.trees_planted,
@@ -75,4 +77,16 @@ export function registerVisit(customerId: string, meta?: VisitMeta): VisitResult
   });
 
   return transaction(customerId);
+}
+
+// Enrich a visit record with geo + language data after the HTTP response
+// has been sent. Called fire-and-forget so it never blocks the user.
+export function enrichVisit(
+  visitId: number,
+  data: { country: string | null; countryCode: string | null; city: string | null; language: string | null },
+): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE visits SET country = ?, country_code = ?, city = ?, language = ? WHERE id = ?`,
+  ).run(data.country, data.countryCode, data.city, data.language, visitId);
 }

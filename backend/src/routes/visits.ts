@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { registerVisit } from '../services/visitService';
+import { registerVisit, enrichVisit } from '../services/visitService';
 import { getDb } from '../db';
 import { toISO } from '../utils/date';
+import { lookupGeo, parseLanguage } from '../utils/geo';
 
 interface ScanParams { customerId: string; }
 interface ConfigRow { value: string; }
@@ -14,6 +15,10 @@ interface RecentRow {
   visited_at: string;
   user_agent: string | null;
   ip: string | null;
+  country: string | null;
+  country_code: string | null;
+  city: string | null;
+  language: string | null;
 }
 
 function parseUA(ua: string): { type: string; os: string; browser: string; brand: string | null } {
@@ -120,6 +125,19 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       const mod = result.totalVisits % visitsPerTree;
       const visitsUntilNextTree = mod === 0 ? visitsPerTree : visitsPerTree - mod;
 
+      // Enrich with geo + language asynchronously — never blocks the response
+      const visitId = result.visitId;
+      const acceptLang = (request.headers['accept-language'] as string) ?? '';
+      setImmediate(async () => {
+        const [geo] = await Promise.all([lookupGeo(ip)]);
+        enrichVisit(visitId, {
+          country: geo?.country ?? null,
+          countryCode: geo?.countryCode ?? null,
+          city: geo?.city ?? null,
+          language: parseLanguage(acceptLang),
+        });
+      });
+
       return reply.status(201).send({
         customerId,
         totalVisits: result.totalVisits,
@@ -159,6 +177,10 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
                         brand: { type: ['string', 'null'] },
                       },
                     },
+                    country: { type: ['string', 'null'] },
+                    countryCode: { type: ['string', 'null'] },
+                    city: { type: ['string', 'null'] },
+                    language: { type: ['string', 'null'] },
                   },
                 },
               },
@@ -171,7 +193,8 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       const db = getDb();
       const rows = db
         .prepare(
-          `SELECT id, customer_id, visited_at, user_agent, ip
+          `SELECT id, customer_id, visited_at, user_agent, ip,
+                  country, country_code, city, language
            FROM visits
            WHERE user_agent IS NOT NULL
            ORDER BY visited_at DESC
@@ -185,6 +208,10 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
           customerId: r.customer_id,
           visitedAt: toISO(r.visited_at),
           device: parseUA(r.user_agent ?? ''),
+          country: r.country,
+          countryCode: r.country_code,
+          city: r.city,
+          language: r.language,
         })),
       });
     },

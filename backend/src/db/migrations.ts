@@ -36,4 +36,14 @@ export function runMigrations(): void {
   ]) {
     try { db.exec(col); } catch { /* already exists */ }
   }
+
+  // Migration 3: geo + language enrichment (async, populated after scan)
+  for (const col of [
+    'ALTER TABLE visits ADD COLUMN country TEXT',
+    'ALTER TABLE visits ADD COLUMN country_code TEXT',
+    'ALTER TABLE visits ADD COLUMN city TEXT',
+    'ALTER TABLE visits ADD COLUMN language TEXT',
+  ]) {
+    try { db.exec(col); } catch { /* already exists */ }
+  }
 }
