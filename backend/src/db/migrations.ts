@@ -28,4 +28,12 @@ export function runMigrations(): void {
     CREATE INDEX IF NOT EXISTS idx_visits_customer_id ON visits(customer_id);
     CREATE INDEX IF NOT EXISTS idx_visits_visited_at ON visits(visited_at);
   `);
+
+  // Migration 2: device-tracking columns (safe on existing DBs)
+  for (const col of [
+    'ALTER TABLE visits ADD COLUMN user_agent TEXT',
+    'ALTER TABLE visits ADD COLUMN ip TEXT',
+  ]) {
+    try { db.exec(col); } catch { /* already exists */ }
+  }
 }

@@ -9,6 +9,11 @@ export interface VisitResult {
   lastSeen: string;
 }
 
+export interface VisitMeta {
+  userAgent?: string;
+  ip?: string;
+}
+
 interface CustomerRow {
   total_visits: number;
   trees_planted: number;
@@ -25,7 +30,7 @@ function parseVisitsPerTree(value: string): number {
   return n;
 }
 
-export function registerVisit(customerId: string): VisitResult {
+export function registerVisit(customerId: string, meta?: VisitMeta): VisitResult {
   const db = getDb();
 
   const transaction = db.transaction((id: string): VisitResult => {
@@ -37,7 +42,9 @@ export function registerVisit(customerId: string): VisitResult {
         last_seen = datetime('now')
     `).run(id);
 
-    db.prepare(`INSERT INTO visits (customer_id, visited_at) VALUES (?, datetime('now'))`).run(id);
+    db.prepare(
+      `INSERT INTO visits (customer_id, visited_at, user_agent, ip) VALUES (?, datetime('now'), ?, ?)`,
+    ).run(id, meta?.userAgent ?? null, meta?.ip ?? null);
 
     const customer = db
       .prepare(`SELECT total_visits, trees_planted, last_seen FROM customers WHERE id = ?`)
