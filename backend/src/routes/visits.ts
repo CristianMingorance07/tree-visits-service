@@ -16,15 +16,15 @@ interface RecentRow {
   ip: string | null;
 }
 
-function parseUA(ua: string): { device: string; os: string; browser: string } {
-  const device =
+function parseUA(ua: string): { type: string; os: string; browser: string; brand: string | null } {
+  const type =
     /tablet|ipad/i.test(ua) ? 'tablet' :
     /mobile|android|iphone/i.test(ua) ? 'mobile' : 'desktop';
 
   const os =
     /iphone|ipad/i.test(ua) ? 'iOS' :
     /android/i.test(ua) ? 'Android' :
-    /windows/i.test(ua) ? 'Windows' :
+    /windows nt/i.test(ua) ? 'Windows' :
     /mac os x|macos/i.test(ua) ? 'macOS' :
     /linux/i.test(ua) ? 'Linux' : 'Unknown';
 
@@ -35,7 +35,17 @@ function parseUA(ua: string): { device: string; os: string; browser: string } {
     /chrome/i.test(ua) ? 'Chrome' :
     /safari/i.test(ua) ? 'Safari' : 'Unknown';
 
-  return { device, os, browser };
+  const brand =
+    /iphone|ipad/i.test(ua) ? 'Apple' :
+    /samsung/i.test(ua) ? 'Samsung' :
+    /xiaomi|miui/i.test(ua) ? 'Xiaomi' :
+    /huawei/i.test(ua) ? 'Huawei' :
+    /pixel/i.test(ua) ? 'Google' :
+    /oppo/i.test(ua) ? 'OPPO' :
+    /oneplus/i.test(ua) ? 'OnePlus' :
+    /motorola/i.test(ua) ? 'Motorola' : null;
+
+  return { type, os, browser, brand };
 }
 
 export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
@@ -146,6 +156,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
                         type: { type: 'string' },
                         os: { type: 'string' },
                         browser: { type: 'string' },
+                        brand: { type: ['string', 'null'] },
                       },
                     },
                   },
@@ -164,7 +175,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
            FROM visits
            WHERE user_agent IS NOT NULL
            ORDER BY visited_at DESC
-           LIMIT 20`,
+           LIMIT 100`,
         )
         .all() as RecentRow[];
 

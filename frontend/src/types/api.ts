@@ -50,6 +50,7 @@ export interface DeviceInfo {
   type: string;   // 'mobile' | 'tablet' | 'desktop'
   os: string;
   browser: string;
+  brand: string | null;
 }
 
 export interface RecentScan {
