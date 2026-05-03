@@ -241,7 +241,7 @@ curl -X POST http://localhost:3000/api/v1/reset \
 | `VISITS_PER_TREE` | `10` | Seeds the initial threshold on first start |
 | `DB_PATH` | `./data/visits.db` | Directory is created automatically |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:8080` | Comma-separated list of allowed origins |
-| `ADMIN_SECRET` | `local-dev-admin-secret` (Docker) / _(empty)_ (bare dev) | **Required in production** — server won't start without it |
+| `ADMIN_SECRET` | `local-dev-admin-secret` (Docker) / _(empty)_ (bare dev) | **Required in production** — server won't start without it. Production value: `tree-nation-admin-2026` |
 | `RAPID_FIRE_MAX_HITS` | `3` | Max requests allowed from the same IP + device ID within 30 seconds before the anti-bot filter silently drops them. Raise this in demo environments so the tracking page can be refreshed freely |
 
 ### Frontend (`frontend/.env`)
