@@ -47,13 +47,12 @@
         </div>
       </div>
 
-      <!-- Local-only destructive action -->
+      <!-- Admin reset — always visible, protected by ADMIN_SECRET in the modal -->
       <div
-        v-if="canShowLocalReset"
         class="mb-8 rounded-2xl border border-red-100 bg-red-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
         <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Local reset</p>
+          <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Admin reset</p>
           <p class="text-xs text-red-700 font-semibold">Resets both Demo and Live panels</p>
           <p class="text-[10px] text-red-400 mt-0.5">
             Deletes all demo/live visits and customers, then reloads the seeded demo dataset.
@@ -287,8 +286,6 @@ const showResetModal = ref(false);
 const modalError = ref('');
 const adminSecret = ref(window.localStorage.getItem('treeVisitsAdminSecret') ?? '');
 const simulatorKey = ref(0);
-
-const canShowLocalReset = import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 const demoChartTotal = ref(0);
 const demoChartLabel = ref('Last 24 hours');
