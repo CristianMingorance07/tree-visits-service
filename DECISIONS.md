@@ -1,134 +1,167 @@
 # Technical Decisions
 
-## Why Node.js + TypeScript over other backend options
-
-Tree-Nation is migrating from PHP/Laravel to a Vue 3 + TypeScript frontend. Keeping the backend in TypeScript means a single language across the stack, shared type definitions if a monorepo evolves further, and no context-switching for developers. Node.js is well-suited here: the workload is I/O-bound (SQLite reads/writes) with no CPU-heavy computation, so the event loop is a natural fit. TypeScript's strict mode catches an entire class of bugs at compile time that would otherwise surface only in production.
-
-Alternatives considered:
-- **Go** — excellent performance, but adds a second language to the stack when the team is already investing in TypeScript.
-- **Python/FastAPI** — popular for data tasks but slower cold-start and no type-sharing advantage here.
+This document explains the non-obvious choices made while building this service. Not every decision needs justification — some are just the obvious pick. These are the ones where there was a real trade-off or where the reasoning might not be immediately clear from reading the code.
 
 ---
 
-## Why Fastify over Express
+## Node.js + TypeScript
 
-Fastify offers:
-1. **Schema-first validation** — route schemas (body, params, response) are declared as JSON Schema objects. Fastify validates inputs automatically and serialises outputs up to 2× faster than `JSON.stringify` via `fast-json-stringify`. This removes a whole category of boilerplate validation code.
-2. **First-class TypeScript support** — generic route handlers and typed request/reply objects with zero extra packages.
-3. **Built-in Swagger integration** via `@fastify/swagger` + `@fastify/swagger-ui` — API docs are generated directly from the same schema objects used for validation, so docs can never drift from reality.
-4. **Better performance** — consistently ~20–30% higher req/s than Express in benchmarks, relevant at scale.
+Tree-Nation is migrating to Vue 3 + TypeScript on the frontend. Matching the backend language means a single mental model across the stack, shared type definitions between layers, and no context switch when moving between files. That's the main reason.
 
-Express would have worked, but the extra setup cost (express-validator, manual serialisation, separate OpenAPI tooling) yields no offsetting benefit.
+Node.js itself is a natural fit for this kind of workload — lots of small I/O operations (SQLite reads/writes, occasional geo lookups), nothing CPU-intensive. The event loop handles this well. TypeScript strict mode catches a real class of bugs at compile time, especially around `null`/`undefined` handling, that would otherwise only show up in production.
+
+I looked at Go briefly. It would be faster and the binaries are tiny, but it adds a second language to a stack where TypeScript is already the investment. Not worth it here.
 
 ---
 
-## Why SQLite over in-memory storage or PostgreSQL
+## Fastify over Express
 
-| Concern | In-memory | SQLite | PostgreSQL |
-|---|---|---|---|
-| Persistence | ✗ | ✓ | ✓ |
-| External infra | — | none | container/server |
-| ACID transactions | — | ✓ (WAL) | ✓ |
-| Setup effort | trivial | trivial | non-trivial |
-| Scale ceiling | single-process | ~100k writes/day | unlimited |
+I went with Fastify mainly for three reasons:
 
-For a technical assessment that must run with `docker compose up --build` and no external services, SQLite is the only choice that satisfies all three constraints (persistence, ACID, zero infra). WAL journal mode is enabled so reads don't block writes, giving good concurrent performance for this workload.
+**Schema-first validation.** You declare the shape of the request body, params, querystring, and response as JSON Schema objects directly on the route. Fastify validates incoming requests automatically and serialises responses via `fast-json-stringify`, which is noticeably faster than `JSON.stringify`. More importantly, it removes a whole category of boilerplate — you don't have to manually validate inputs or write serialisation logic.
 
----
+**TypeScript integration.** Generic route handlers with typed `request.body`, `request.params`, etc. out of the box, without extra packages. This was genuinely useful — several bugs were caught at compile time that Express would have let through silently.
 
-## Why atomic SQLite transactions for visit counting
+**Swagger for free.** `@fastify/swagger` generates the OpenAPI spec from the same schema objects already on each route. The docs can't drift from reality because they're derived from the validation layer, not written separately.
 
-The core operation — increment visit counter, check milestone, maybe increment tree counter — must be atomic. Without a transaction:
-
-1. Process A reads `total_visits = 9`
-2. Process B reads `total_visits = 9`
-3. Process A writes `total_visits = 10`, plants a tree
-4. Process B writes `total_visits = 10`, plants a second tree → **double plant**
-
-`db.transaction()` in better-sqlite3 wraps the entire operation in a single SQLite transaction. Because better-sqlite3 is synchronous (no async/await), there is no opportunity for the event loop to interleave operations mid-transaction. The result is correctly serialised visit counting even under concurrent HTTP requests hitting the same Node.js process.
+The project is currently on Fastify v5 (upgraded from v4 during the dependency audit phase). The main breaking change was the `onSend` hook, which dropped callback-style (`done()`) in favour of async with a return value. Everything else was straightforward.
 
 ---
 
-## Why hot-reloadable config (PATCH /api/v1/config)
+## SQLite as the database
 
-The spec states the threshold must be "configurable". There are two implementation choices:
-- **Env-var only** — requires a container restart to change; downtime for a live deployment.
-- **DB-backed + PATCH endpoint** — the value is read from `app_config` on every visit. A `PATCH /api/v1/config` call updates the DB row and takes effect immediately on the next visit, with no restart.
+The constraints were: persistence, ACID transactions, and zero external infrastructure (the whole thing needs to start with `docker compose up --build`). SQLite is the only option that satisfies all three without asking the evaluator to spin up a separate Postgres container.
 
-The DB-backed approach also survives restarts automatically (the last configured value persists). The env var `VISITS_PER_TREE` seeds the default via the Docker Compose environment block, but the live value is always the one in `app_config`.
+Beyond the setup convenience, SQLite is genuinely a reasonable choice here. The workload is sequential — one Node.js process, one SQLite file, WAL journal mode enabled so reads don't block writes. For a single-store deployment tracking tens of thousands of visits per day, it holds up fine.
 
----
-
-## Why Vue 3 + TypeScript for the frontend
-
-Tree-Nation is explicitly migrating to Vue 3 + TypeScript. This dashboard is therefore both a working deliverable and a proof of fit within that migration direction. Specific choices:
-
-- **Composition API (`<script setup>`)** — functions, computed values, and lifecycle hooks are plain TypeScript with no special framework concepts. This is idiomatic Vue 3 and aligns with the migration target.
-- **Composables** — `useVisitsData` encapsulates data fetching, polling, and cleanup. It is a thin, testable unit with a clear contract (reactive refs + `isLoading` + `error`), following the same pattern as Vue 3's own composables.
-- **Chart.js** — the most widely used charting library in the Vue ecosystem, with first-class TypeScript types and a simple imperative API that integrates cleanly with `onMounted`/`onUnmounted`.
-- **Tailwind CSS** (PostCSS, not CDN) — processed at build time so unused classes are purged.
+WAL mode specifically: without it, any write operation locks the database for both readers and writers. WAL lets reads happen concurrently with writes, which matters when the dashboard is polling six endpoints every ten seconds while visits are also being recorded.
 
 ---
 
-## Why polling over WebSockets for the frontend
+## Atomic transactions for visit counting
 
-WebSockets would be the natural choice if latency mattered (e.g., sub-second live updates). For a reforestation dashboard where the meaningful metric is visits-per-hour, a 10-second polling interval is indistinguishable from real-time and is significantly simpler:
+The core operation — increment visit counter, check if it crossed a milestone, maybe increment tree counter — has to be atomic. If it isn't, two concurrent requests for the same customer can both read `total_visits = 9`, both write `10`, and both plant a tree. The customer ends up with two trees for one milestone.
 
-- No server-side connection management or heartbeat logic
-- No sticky-session requirement for horizontal scaling
-- Composable cleanup (`clearInterval` in `onUnmounted`) is a one-liner
-- Works through every proxy, CDN, and firewall with no configuration
+`db.transaction()` in better-sqlite3 wraps the whole thing in a single SQLite write transaction. The key detail is that better-sqlite3 is synchronous — there's no `await` inside the transaction, which means the event loop can't interleave another operation mid-write. The milestone check and the counter increment happen atomically, every time.
 
-The 10-second interval was chosen as the midpoint between "feels live" and "doesn't spam the API". It can be tuned without any architectural change.
+This is the most important correctness property in the codebase. It's not complicated, but it's the one thing that would silently double-count trees if it were missing.
 
 ---
 
-## Rate limiting — why only write endpoints are limited
+## Hot-reloadable threshold (PATCH /api/v1/config)
 
-`@fastify/rate-limit` is registered with `global: false`, which disables the default blanket limit and requires an explicit `config.rateLimit` on each route. Only mutation endpoints carry a limit:
+The threshold (`visits_per_tree`) could have been env-var only. The problem is that changing an env var requires a container restart, which means downtime. Instead the value lives in the `app_config` table and is read on every visit.
 
-- `POST /api/v1/visits` — 120 req/min (device events, burst-tolerant)
-- `GET /api/v1/visits/track/:customerId` — 60 req/min (public tracking link, human-paced)
+`PATCH /api/v1/config` updates the DB row and the new threshold takes effect on the very next request — no restart, no downtime. The env var `VISITS_PER_TREE` seeds the initial value on first start, but after that the DB is the source of truth.
 
-Read endpoints (stats, chart, customers) are unrestricted. A global limit would penalise the dashboard's own polling loop: with two self-fetching chart components and a six-endpoint composable poll every 10 seconds, the baseline is ~48 req/min before any user interaction — uncomfortably close to a tight global cap. Targeting only writes avoids this while still protecting against abusive visit injection.
-
----
-
-## Security headers and the ADMIN_SECRET pattern
-
-Every HTTP response carries three headers added via a Fastify `onSend` hook:
-
-- `X-Content-Type-Options: nosniff` — prevents MIME-type sniffing attacks
-- `X-Frame-Options: DENY` — blocks the app from being embedded in iframes (clickjacking)
-- `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage on cross-origin navigations
-
-Destructive endpoints (`POST /api/v1/reset`, `PATCH /api/v1/config`) are protected by an `ADMIN_SECRET` environment variable. In production the server refuses to start without it; in local development it may be left empty to avoid friction. When set, the server requires the `x-admin-secret` header to match. This is intentionally lightweight: the public dashboard does not need full authentication, only protection against accidental or malicious reset/reconfiguration in a live environment.
+The endpoint is protected by `ADMIN_SECRET` so it can't be triggered by anyone who stumbles across the API docs.
 
 ---
 
 ## Public tracking endpoint and async geo enrichment
 
-`GET /api/v1/visits/track/:customerId` exists alongside the device `POST /api/v1/visits` to support a different ingestion path: a public tracking link that can be opened directly or shared as a QR code. The tracking endpoint:
+The `GET /api/v1/visits/track/:customerId` endpoint serves a different use case than the device `POST`: it's designed to be opened as a URL — from a browser, QR code, or redirect — rather than called programmatically. The response returns the full visit result as JSON, which the TrackView page uses to show a personalised "you're X visits from a tree" screen.
 
-1. Calls `registerVisit` synchronously — the 201 response is sent immediately with the visit result.
-2. Then, in a `setImmediate` callback (after the response is flushed), fires an async geo lookup against `ip-api.com` using the request's real IP, and enriches the visit row with country, city, and language via a background `UPDATE`.
+Geo enrichment happens asynchronously. The response goes out immediately after `registerVisit`, then `setImmediate` kicks off an `ip-api.com` lookup in the background. When it resolves, it writes country, city, and language back to the visit row via an `UPDATE`. The dashboard picks it up on the next poll.
 
-The `setImmediate` is deliberate: geo lookup adds 100–500 ms of network latency. Doing it in the request path would slow every tracked visit. Doing it after the response means the visit is always recorded instantly, and the geo data appears in the dashboard on the next poll cycle. A 1500 ms abort timeout guards against hanging connections to the geo API.
+The reason for this separation is latency. Geo lookups add 100–500 ms depending on the region. Waiting for that before sending the response would make every tracked page visit feel slow, which is the opposite of what you want. The slight delay before geo data appears in the dashboard is invisible to the user.
 
-Private and loopback IPs (127.x, 10.x, 192.168.x, etc.) are short-circuited — a regex check skips the geo call entirely since these addresses would return no useful data.
+Private and loopback IPs skip the lookup entirely — there's no point sending `127.0.0.1` to a geo API.
+
+---
+
+## Anti-bot layer on the tracking endpoint
+
+The public tracking endpoint is intentionally open (no auth required — it needs to work from a bare browser). That means it's also a target for scrapers, bots, and simple curl loops. Four layers were added to filter noise without breaking legitimate traffic:
+
+1. **ID format validation** — customer IDs must match `^[a-zA-Z0-9_\-.]{1,100}$`. Anything else gets a 400.
+2. **Honeypot ID detection** — IDs containing words like `bot`, `crawler`, `admin`, `test` return a silent 200 (no visit recorded, no error). Returning 400 would tell an attacker exactly what to avoid.
+3. **Bot User-Agent detection** — known crawler UAs (Googlebot, curl, python-requests, etc.) get a 201 that mimics success. The goal is to look like a normal endpoint to automated scans.
+4. **Rapid-fire sliding window** — more than 3 requests from the same IP + customer ID pair within 30 seconds get silently dropped. This catches the simple loop attack without breaking users who open the same link a couple of times.
+
+The 30s/3-hit window was chosen based on what a human could realistically trigger: if someone scans a QR code, the page loads, maybe they reload once — that's 2 hits. Three gives a small buffer; anything over that in 30 seconds is almost certainly not organic.
+
+---
+
+## Demo tab vs Live tab
+
+The dashboard has two modes. Demo uses a set of simulated store devices (`device-store-*`) whose visits are generated by the in-page EventSimulator. Live shows real tracking-link visits from actual browsers.
+
+The split exists because during development and for evaluators, you need to see the full dashboard in action without waiting for real-world traffic. But mixing simulated and real visits in the same chart or leaderboard makes the data meaningless — 119 seeded demo visits would drown out any real visit.
+
+The separation is implemented at the data level: demo visits have customer IDs that start with `device-store-`, real visits come from the tracking endpoint and have non-prefixed IDs. The dashboard filters on this prefix to populate each tab. The VisitsChart component accepts a `filter` prop (`all` or `real`) which maps to the same filter on the backend query.
+
+---
+
+## Unified API wrapper (apiFetch)
+
+All API calls in the frontend go through a single `apiFetch<T>` function in `lib/api.ts`. It handles the base URL, throws typed `ApiError` instances for non-2xx responses (including the error message from the JSON body, not just the status code), and returns typed responses.
+
+The reason this matters: before unifying, several components had their own `fetch` calls with slightly different error handling — some checked `res.ok`, some didn't, some read the JSON body on failure, some didn't. The dashboard was also losing the actual API error message and showing a generic "failed" to the user. `apiFetch` fixes all of this consistently in one place. Adding auth headers, request tracing, or retries later becomes a one-line change.
+
+---
+
+## Polling instead of WebSockets
+
+WebSockets would be the obvious choice if latency mattered — sub-second updates, push from server to client. For a reforestation dashboard where the relevant metric is visits-per-hour, a 10-second poll interval is indistinguishable from real-time in practice, and polling is significantly simpler to operate:
+
+- No server-side connection state or heartbeat logic
+- No sticky-session requirement if you ever scale horizontally
+- Works through every proxy, CDN, and load balancer without configuration
+- Cleanup in the composable is just `clearInterval` in `onUnmounted`
+
+The 10-second interval felt right during testing — the numbers update noticeably but the page doesn't feel jumpy. It's a constant in `useVisitsData` (`POLL_INTERVAL_MS`) so it's easy to change.
+
+---
+
+## Rate limiting — only writes, not reads
+
+`@fastify/rate-limit` is configured with `global: false`, which means no limit by default. Each route that needs one opts in explicitly. Only the write paths carry limits:
+
+- `POST /api/v1/visits` — 120 req/min (device events, expected to burst during store hours)
+- `GET /api/v1/visits/track/:customerId` — 60 req/min (human-paced, plus anti-bot layer above)
+- `POST /api/v1/reset` — 10 req/min (admin action, should never be rapid-fired)
+
+Read endpoints are unrestricted. A global limit would interfere with the dashboard's own polling — six parallel requests every 10 seconds from the composable, plus chart fetches when the user switches range — easily hitting a tight global cap before any real load appears. Restricting writes specifically protects against visit injection and reset abuse without penalising the dashboard itself.
+
+---
+
+## Security headers
+
+Three headers are added to every response via a Fastify `onSend` hook:
+
+- `X-Content-Type-Options: nosniff` — prevents MIME sniffing
+- `X-Frame-Options: DENY` — blocks clickjacking via iframe embedding
+- `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage on cross-origin navigations
+
+The `ADMIN_SECRET` pattern is intentionally minimal. The dashboard is public — stats, charts, leaderboards, even the tracking link. The only things that need protection are reset and config changes. Rather than adding a full auth layer (JWT, sessions, refresh tokens) for two endpoints, an env-var secret sent as a custom header is sufficient. The server refuses to start without it in production, so there's no risk of accidentally deploying with no protection.
+
+---
+
+## Dependency upgrade strategy
+
+During the audit phase, not everything was updated to its latest major version — intentionally.
+
+**Updated:** Fastify 4→5 (high severity security fix), all `@fastify/*` plugins to their v5-compatible versions, `vitest` 1→3 (fixes a moderate esbuild dev-server vulnerability in the test chain), `better-sqlite3` 9→12.
+
+**Intentionally kept:** `tailwindcss` at v3, `vite` at v5, `vue-router` at v4.
+
+Tailwind v4 is a complete rewrite — the config format, the utility names, and the PostCSS integration all changed. Migrating would mean rewriting a significant portion of the CSS across every component for no functional benefit. The two remaining moderate vulnerabilities in the frontend audit are both in `esbuild` via `vite`, and they only affect the development server (`npm run dev`). The production build compiles to static files served by nginx — the vulnerable dev server never runs in production.
 
 ---
 
 ## What I would change at scale (10M+ visits/day)
 
-At 10M visits/day (~115 req/s average, with bursty peaks potentially 5–10×):
+At ~115 req/s average with bursty peaks potentially 5–10x higher:
 
-1. **Migrate from SQLite to PostgreSQL** — SQLite's single-writer model becomes a bottleneck. Postgres supports true concurrent writes and connection pooling via PgBouncer.
+**SQLite → PostgreSQL.** The single-writer model becomes the bottleneck first. Postgres with PgBouncer for connection pooling handles concurrent writes and gives you read replicas.
 
-2. **Redis INCR for counters** — the visit counter increment (`total_visits + 1`) is a hot write. Redis `INCR` is atomic, in-memory, and handles hundreds of thousands of ops/second. The canonical count can be synced to Postgres on a schedule or on milestone events.
+**Redis for counter increments.** The hot path — `total_visits + 1` — is a perfect fit for `INCR`. Redis handles this atomically at hundreds of thousands of ops/second. The canonical count syncs to Postgres on milestones or on a schedule.
 
-3. **Event sourcing for the visits log** — rather than inserting each visit synchronously in the request path, publish to a message queue (Kafka, SQS). Consumers aggregate into time-series buckets and write to Postgres. The API becomes non-blocking for write acceptance.
+**Async visit ingestion.** Rather than inserting each visit synchronously in the request path, publish to a queue (Kafka, SQS). Consumers aggregate into time-series buckets and write to Postgres. The API layer becomes non-blocking for write acceptance.
 
-4. **Stateless API layer, horizontal scaling** — with Redis handling counters and Postgres for persistence, the Node.js API layer holds no local state. Multiple instances can run behind a load balancer with no sticky sessions.
+**Stateless API layer.** With Redis for counters and Postgres for persistence, the Node.js layer holds no local state. Multiple instances can run behind a load balancer with no sticky sessions.
 
-5. **Read replicas + caching** — the `GET /api/v1/visits/hourly` query runs a `GROUP BY` over a 24h window. At scale, this moves to a Postgres read replica with the result cached in Redis (TTL 30s). The dashboard composable would hit the cache, not the primary DB.
+**Cache the aggregate queries.** The chart queries (`GROUP BY` over a 30-day window) move to a read replica and get cached in Redis with a short TTL. The dashboard polls the cache, not the primary DB.
+
+The geo enrichment path (the `setImmediate` + `ip-api.com` call) already handles scale fairly well — it never blocks responses and the abort timeout prevents hanging connections. At high volume you'd replace `ip-api.com` with an on-premise MaxMind database to avoid the rate limits and the external network hop.
