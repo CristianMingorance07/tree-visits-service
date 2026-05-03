@@ -4,6 +4,20 @@ A real-time visit tracking service that plants a digital tree every N customer v
 
 ---
 
+## Reviewer access
+
+| | |
+|---|---|
+| **Live dashboard** | https://tree-visits-service-production.up.railway.app |
+| **Admin secret (production)** | `tree-nation-admin-2026` |
+| **Admin secret (local Docker)** | `local-dev-admin-secret` |
+
+> **Note:** credentials are included here exclusively because this is a technical assessment. In any real environment, secrets must never be committed to a repository — they belong in environment variables managed by the hosting platform (e.g. Railway → Variables, GitHub Secrets, or a secrets manager).
+
+The admin secret is needed to use the **Reset data** button on the dashboard (resets all visits and reloads the demo seed). It is also required for `PATCH /api/v1/config` and `POST /api/v1/reset` via the API.
+
+---
+
 ## How it works
 
 Each time a customer device sends a visit event, the service atomically increments their visit counter inside a SQLite transaction. When the counter hits the configured threshold (default: **10 visits**), `trees_planted` is incremented in the same transaction — preventing double-planting under concurrent load.
@@ -200,7 +214,7 @@ The new value takes effect on the very next visit — no container restart requi
 | `DB_PATH` | `./data/visits.db` | SQLite file path (directory auto-created) |
 | `NODE_ENV` | `development` | Disables Swagger UI when `production` |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed origins |
-| `ADMIN_SECRET` | _(empty)_ | Required in production. Sent as `x-admin-secret` on `PATCH /config` and `POST /reset` |
+| `ADMIN_SECRET` | `local-dev-admin-secret` (Docker) / _(empty)_ (bare dev) | **Required in production.** Protects `PATCH /config` and `POST /reset`. Send as the `x-admin-secret` request header. The dashboard reset dialog asks for this value — in production, set it in your hosting platform's environment variables (e.g. Railway → Variables). |
 
 ### Frontend (`.env`)
 

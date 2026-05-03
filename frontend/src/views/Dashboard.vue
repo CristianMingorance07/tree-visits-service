@@ -47,29 +47,46 @@
         </div>
       </div>
 
-      <!-- Admin reset — always visible, protected by ADMIN_SECRET in the modal -->
-      <div
-        class="mb-8 rounded-2xl border border-red-100 bg-red-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-      >
-        <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Admin reset</p>
-          <p class="text-xs text-red-700 font-semibold">Resets both Demo and Live panels</p>
-          <p class="text-[10px] text-red-400 mt-0.5">
-            Deletes all demo/live visits and customers, then reloads the seeded demo dataset.
-          </p>
-          <p v-if="resetStatus" class="text-[10px] font-semibold mt-1" :class="resetError ? 'text-red-600' : 'text-[#3aaa68]'">
-            {{ resetStatus }}
-          </p>
-        </div>
-        <button
-          @click="openResetModal"
-          :disabled="resetting"
-          class="shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-full border transition-all duration-200
-                 bg-white border-red-200 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-          title="Reset demo and live visits/customers"
+      <!-- Admin reset: single expanding pill — first click expands info, second opens modal -->
+      <div class="mb-8 flex justify-end">
+        <div
+          class="inline-flex items-stretch rounded-2xl border overflow-hidden transition-colors duration-200"
+          :class="resetExpanded ? 'border-red-300' : 'border-red-200'"
         >
-          <span>↺</span> {{ resetting ? 'Resetting...' : 'Reset all data' }}
-        </button>
+          <!-- Info panel: CSS max-width expansion -->
+          <div
+            class="overflow-hidden transition-[max-width,opacity] duration-300 ease-out"
+            :class="resetExpanded ? 'max-w-[280px] opacity-100' : 'max-w-0 opacity-0'"
+          >
+            <div class="px-4 py-2.5">
+              <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-0.5 whitespace-nowrap">Admin reset</p>
+              <p class="text-xs text-red-700 font-semibold whitespace-nowrap">Resets Demo &amp; Live panels</p>
+              <p class="text-[10px] text-red-400 mt-0.5 whitespace-nowrap">Click the button again to open the dialog.</p>
+              <p v-if="resetStatus" class="text-[10px] font-semibold mt-1 whitespace-nowrap" :class="resetError ? 'text-red-600' : 'text-[#3aaa68]'">
+                {{ resetStatus }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div
+            class="w-px self-stretch bg-red-100 transition-opacity duration-200"
+            :class="resetExpanded ? 'opacity-100' : 'opacity-0'"
+          />
+
+          <!-- Button -->
+          <button
+            @click="handleResetClick"
+            :disabled="resetting"
+            class="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all duration-200 active:scale-95 disabled:opacity-40 whitespace-nowrap select-none"
+            :class="resetExpanded
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'bg-white text-red-400 hover:text-red-500 hover:bg-red-50'"
+          >
+            <span>↺</span>
+            <span>{{ resetExpanded ? 'Open dialog' : 'Reset data' }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- Loading skeleton -->
@@ -206,8 +223,7 @@
       :busy="resetting"
       @close="closeResetModal"
     >
-      <template #icon>↺</template>
-      <template #label>Destructive local action</template>
+      <template #label>Destructive action</template>
 
       <div class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -236,6 +252,15 @@
             class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-mono text-gray-700 outline-none transition-all
                    focus:border-red-200 focus:bg-white focus:ring-4 focus:ring-red-100 disabled:opacity-50"
           />
+          <p class="mt-2 text-[10px] text-gray-400">
+            Set via <code class="font-mono bg-gray-100 px-1 rounded">ADMIN_SECRET</code> env var ·
+            <a
+              href="https://github.com/CristianMingorance07/tree-visits-service/blob/main/README.md#environment-variables"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-[#3aaa68] hover:underline"
+            >README → Environment variables</a>
+          </p>
         </label>
 
         <p v-if="modalError" class="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">
@@ -282,6 +307,7 @@ const activeTab = ref<'demo' | 'live'>('demo');
 const resetting = ref(false);
 const resetStatus = ref('');
 const resetError = ref(false);
+const resetExpanded = ref(false);
 const showResetModal = ref(false);
 const modalError = ref('');
 const adminSecret = ref(window.localStorage.getItem('treeVisitsAdminSecret') ?? '');
@@ -301,6 +327,14 @@ function onLiveStats(total: number, label: string) {
   liveChartLabel.value = label;
 }
 
+function handleResetClick() {
+  if (resetExpanded.value) {
+    openResetModal();
+  } else {
+    resetExpanded.value = true;
+  }
+}
+
 function openResetModal() {
   resetStatus.value = '';
   resetError.value = false;
@@ -312,6 +346,7 @@ function closeResetModal() {
   if (resetting.value) return;
   showResetModal.value = false;
   modalError.value = '';
+  resetExpanded.value = false;
 }
 
 async function confirmReset() {
