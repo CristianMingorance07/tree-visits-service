@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import staticFiles from '@fastify/static';
@@ -16,11 +16,11 @@ import { configRoutes } from './routes/config';
 export async function buildServer() {
   const fastify = Fastify({ logger: config.nodeEnv !== 'test' });
 
-  fastify.addHook('onSend', (_request, reply, _payload, done) => {
+  fastify.addHook('onSend', async (_request, reply, payload) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    done();
+    return payload;
   });
 
   await fastify.register(cors, {
@@ -111,7 +111,7 @@ export async function buildServer() {
     },
   );
 
-  fastify.setErrorHandler((error, _request, reply) => {
+  fastify.setErrorHandler((error: FastifyError, _request, reply) => {
     if (error.validation) {
       return reply.status(400).send({ error: 'Validation error', details: error.message });
     }

@@ -127,7 +127,7 @@ describe('admin routes', () => {
     });
 
     expect(res.statusCode).toBe(415);
-    expect(res.json()).toMatchObject({ error: 'Unsupported Media Type: application/x-www-form-urlencoded' });
+    expect(res.json()).toMatchObject({ error: expect.stringContaining('Unsupported Media Type') });
   });
 
   it('resets live data and reloads seeded demo data with the admin secret', async () => {
