@@ -18,7 +18,7 @@
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Visits</span>
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Trees</span>
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Next</span>
-      <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-center">Visit</span>
+      <span v-if="showQr" class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-center">Visit</span>
     </div>
 
     <!-- Skeleton -->
@@ -83,6 +83,7 @@
 
           <!-- QR toggle -->
           <button
+            v-if="showQr !== false"
             @click="toggleQr(customer.customerId)"
             class="flex items-center justify-center w-7 h-7 rounded-lg border transition-all duration-200 mx-auto"
             :class="activeQr === customer.customerId
@@ -102,7 +103,7 @@
         <!-- QR panel -->
         <Transition name="qr">
           <div
-            v-if="activeQr === customer.customerId"
+            v-if="showQr !== false && activeQr === customer.customerId"
             class="mx-1 mb-1 rounded-xl border border-[#3aaa68]/20 bg-[#3aaa68]/[0.03] p-4 flex items-center gap-5"
           >
             <img
@@ -139,27 +140,37 @@
 
     <!-- Footer -->
     <p class="text-gray-300 text-[10px] text-center mt-4 font-medium">
-      Progress shows current cycle · {{ visitsPerTree }} visits = 1 tree · click
-      <svg class="inline w-3 h-3 -mt-px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="3" y="14" width="7" height="7"/>
-      </svg>
-      to visit from any device
+      <template v-if="showQr !== false">
+        Progress shows current cycle · {{ visitsPerTree }} visits = 1 tree · click
+        <svg class="inline w-3 h-3 -mt-px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        to visit from any device
+      </template>
+      <template v-else>
+        Progress shows current cycle · {{ visitsPerTree }} visits = 1 tree
+      </template>
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import QRCode from 'qrcode';
 import type { CustomerListItem } from '../types/api';
 
 const props = defineProps<{
   customers: CustomerListItem[];
   visitsPerTree: number;
+  showQr?: boolean;
 }>();
 
-const gridStyle = { gridTemplateColumns: '1fr 72px 54px 52px 40px' };
+const gridStyle = computed(() =>
+  props.showQr === false
+    ? { gridTemplateColumns: '1fr 72px 54px 52px' }
+    : { gridTemplateColumns: '1fr 72px 54px 52px 40px' }
+);
 
 const activeQr = ref<string | null>(null);
 const qrCache = ref<Record<string, string>>({});
