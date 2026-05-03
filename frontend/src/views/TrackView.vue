@@ -315,8 +315,23 @@ async function recordVisit() {
       return;
     }
 
-    result.value = await apiFetch<TrackResult>(`/api/v1/visits/track/${encodeURIComponent(id)}`);
+    const tracked = await apiFetch<TrackResult>(`/api/v1/visits/track/${encodeURIComponent(id)}`);
 
+    // Rapid-fire filter returns {} — fetch existing stats and show cooldown instead
+    if (!tracked?.customerId) {
+      cooldownMsg.value = 'just now';
+      try {
+        const [customer, cfg] = await Promise.all([
+          apiFetch<CustomerListItem>(`/api/v1/customers/${encodeURIComponent(id)}`),
+          apiFetch<ConfigResponse>('/api/v1/config'),
+        ]);
+        result.value = { ...customer, treeEarned: false, visitsPerTree: cfg.visitsPerTree };
+      } catch { /* stats unavailable — show cooldown without data */ }
+      state.value = 'cooldown';
+      return;
+    }
+
+    result.value = tracked;
     try { localStorage.setItem(cooldownKey, String(now)); } catch { /* private browsing */ }
 
     state.value = 'success';
