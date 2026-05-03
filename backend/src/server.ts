@@ -16,14 +16,20 @@ import { configRoutes } from './routes/config';
 export async function buildServer() {
   const fastify = Fastify({ logger: true });
 
+  fastify.addHook('onSend', (_request, reply, _payload, done) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    done();
+  });
+
   await fastify.register(cors, {
     origin: config.corsOrigins,
     methods: ['GET', 'POST', 'PATCH'],
   });
 
   await fastify.register(rateLimit, {
-    max: 600,
-    timeWindow: '1 minute',
+    global: false,
     errorResponseBuilder: (_req, context) => ({
       statusCode: 429,
       error: 'Too Many Requests',
@@ -71,7 +77,13 @@ export async function buildServer() {
     });
   }
 
-  fastify.post('/api/v1/reset', async (_request, reply) => {
+  fastify.post('/api/v1/reset', async (request, reply) => {
+    if (config.adminSecret) {
+      const provided = request.headers['x-admin-secret'];
+      if (provided !== config.adminSecret) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+    }
     resetAndSeed();
     return reply.send({ ok: true, message: 'Demo data reset successfully' });
   });

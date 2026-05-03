@@ -175,12 +175,12 @@ interface DeviceState {
 }
 
 const DEMO_DEVICES: Pick<DeviceState, 'id' | 'name' | 'icon'>[] = [
-  { id: 'device-store-01', name: 'Clothing',    icon: '👕' },
-  { id: 'device-store-03', name: 'Coffee',      icon: '☕' },
-  { id: 'device-store-05', name: 'Pharmacy',    icon: '💊' },
-  { id: 'device-store-07', name: 'Supermarket', icon: '🛒' },
-  { id: 'device-store-02', name: 'Electronics', icon: '📱' },
-  { id: 'device-store-08', name: 'Sports',      icon: '⚽' },
+  { id: 'device-store-01', name: 'Mobile A',  icon: '📱' },
+  { id: 'device-store-03', name: 'Mobile B',  icon: '📱' },
+  { id: 'device-store-05', name: 'Tablet A',  icon: '📟' },
+  { id: 'device-store-07', name: 'Desktop A', icon: '💻' },
+  { id: 'device-store-02', name: 'Mobile C',  icon: '📱' },
+  { id: 'device-store-08', name: 'Desktop B', icon: '💻' },
 ];
 
 const devices = ref<DeviceState[]>(
@@ -267,7 +267,7 @@ async function sendVisit(deviceId: string) {
     if (!(err instanceof ApiError)) throw err;
     if (err.status === 429) {
       rateLimited.value = true;
-      setTimeout(() => { rateLimited.value = false; }, 3000);
+      setTimeout(() => { rateLimited.value = false; }, 6000);
     }
   } finally {
     pending.value = null;

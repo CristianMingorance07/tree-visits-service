@@ -1,7 +1,5 @@
 # Technical Decisions
 
----
-
 ## Why Node.js + TypeScript over other backend options
 
 Tree-Nation is migrating from PHP/Laravel to a Vue 3 + TypeScript frontend. Keeping the backend in TypeScript means a single language across the stack, shared type definitions if a monorepo evolves further, and no context-switching for developers. Node.js is well-suited here: the workload is I/O-bound (SQLite reads/writes) with no CPU-heavy computation, so the event loop is a natural fit. TypeScript's strict mode catches an entire class of bugs at compile time that would otherwise surface only in production.
@@ -34,7 +32,7 @@ Express would have worked, but the extra setup cost (express-validator, manual s
 | Setup effort | trivial | trivial | non-trivial |
 | Scale ceiling | single-process | ~100k writes/day | unlimited |
 
-For a technical assessment that must run with `docker-compose up --build` and no external services, SQLite is the only choice that satisfies all three constraints (persistence, ACID, zero infra). WAL journal mode is enabled so reads don't block writes, giving good concurrent performance for this workload.
+For a technical assessment that must run with `docker compose up --build` and no external services, SQLite is the only choice that satisfies all three constraints (persistence, ACID, zero infra). WAL journal mode is enabled so reads don't block writes, giving good concurrent performance for this workload.
 
 ---
 
@@ -68,7 +66,7 @@ Tree-Nation is explicitly migrating to Vue 3 + TypeScript. This dashboard is the
 - **Composition API (`<script setup>`)** — functions, computed values, and lifecycle hooks are plain TypeScript with no special framework concepts. This is idiomatic Vue 3 and aligns with the migration target.
 - **Composables** — `useVisitsData` encapsulates data fetching, polling, and cleanup. It is a thin, testable unit with a clear contract (reactive refs + `isLoading` + `error`), following the same pattern as Vue 3's own composables.
 - **Chart.js** — the most widely used charting library in the Vue ecosystem, with first-class TypeScript types and a simple imperative API that integrates cleanly with `onMounted`/`onUnmounted`.
-- **Tailwind CSS** (PostCSS, not CDN) — processed at build time so unused classes are purged. Custom design tokens (`forest`, `cream`, `leaf`) are defined once in `tailwind.config.js` and used consistently across all components.
+- **Tailwind CSS** (PostCSS, not CDN) — processed at build time so unused classes are purged.
 
 ---
 
@@ -82,6 +80,42 @@ WebSockets would be the natural choice if latency mattered (e.g., sub-second liv
 - Works through every proxy, CDN, and firewall with no configuration
 
 The 10-second interval was chosen as the midpoint between "feels live" and "doesn't spam the API". It can be tuned without any architectural change.
+
+---
+
+## Rate limiting — why only write endpoints are limited
+
+`@fastify/rate-limit` is registered with `global: false`, which disables the default blanket limit and requires an explicit `config.rateLimit` on each route. Only mutation endpoints carry a limit:
+
+- `POST /api/v1/visits` — 120 req/min (device events, burst-tolerant)
+- `GET /api/v1/visits/scan/:customerId` — 60 req/min (QR scan, human-paced)
+
+Read endpoints (stats, chart, customers) are unrestricted. A global limit would penalise the dashboard's own polling loop: with two self-fetching chart components and a six-endpoint composable poll every 10 seconds, the baseline is ~48 req/min before any user interaction — uncomfortably close to a tight global cap. Targeting only writes avoids this while still protecting against abusive visit injection.
+
+---
+
+## Security headers and the ADMIN_SECRET pattern
+
+Every HTTP response carries three headers added via a Fastify `onSend` hook:
+
+- `X-Content-Type-Options: nosniff` — prevents MIME-type sniffing attacks
+- `X-Frame-Options: DENY` — blocks the app from being embedded in iframes (clickjacking)
+- `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage on cross-origin navigations
+
+Destructive endpoints (`POST /api/v1/reset`, `PATCH /api/v1/config`) are protected by an optional `ADMIN_SECRET` environment variable. When set, the server requires the `x-admin-secret` header to match. When unset (local development), the check is skipped entirely — no friction during development, protected in production by setting the env var in the deployment environment. This is intentionally lightweight: the service does not need full authentication, only protection against accidental or malicious reset/reconfiguration in a live environment.
+
+---
+
+## QR scan endpoint and async geo enrichment
+
+`GET /api/v1/visits/scan/:customerId` exists alongside the device `POST /api/v1/visits` to support a different ingestion path: a physical QR code that customers scan with their own phones. The scan endpoint:
+
+1. Calls `registerVisit` synchronously — the 201 response is sent immediately with the visit result.
+2. Then, in a `setImmediate` callback (after the response is flushed), fires an async geo lookup against `ip-api.com` using the request's real IP, and enriches the visit row with country, city, and language via a background `UPDATE`.
+
+The `setImmediate` is deliberate: geo lookup adds 100–500 ms of network latency. Doing it in the request path would slow every QR scan. Doing it after the response means the visit is always recorded instantly, and the geo data appears in the dashboard on the next poll cycle. A 1500 ms abort timeout guards against hanging connections to the geo API.
+
+Private and loopback IPs (127.x, 10.x, 192.168.x, etc.) are short-circuited — a regex check skips the geo call entirely since these addresses would return no useful data.
 
 ---
 

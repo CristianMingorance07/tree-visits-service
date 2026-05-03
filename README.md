@@ -1,4 +1,4 @@
-# X Visits = 1 Tree — Tree-Nation
+# 10 Visits = 1 Tree — Tree-Nation
 
 A real-time visit tracking service that plants a digital tree every N customer visits. Built as a technical assessment for Tree-Nation's migration to Vue 3 + TypeScript.
 
@@ -6,21 +6,23 @@ A real-time visit tracking service that plants a digital tree every N customer v
 
 ## How it works
 
-Each time a customer device sends a visit event, the service atomically increments their visit counter inside a SQLite transaction. When the counter hits the configured threshold (default: **10 visits**), `trees_planted` is incremented in the same transaction — preventing double-planting under concurrent load. A live Vue 3 dashboard polls the API every 10 seconds and displays aggregate stats, an hourly chart, and a per-customer lookup panel.
+Each time a customer device sends a visit event, the service atomically increments their visit counter inside a SQLite transaction. When the counter hits the configured threshold (default: **10 visits**), `trees_planted` is incremented in the same transaction — preventing double-planting under concurrent load.
+
+A live Vue 3 dashboard polls the API every 10 seconds. It has two tabs:
+
+- **Demo** — a built-in device simulator that sends visits and shows them in real time, with a multi-range chart (24h / 7d / 30d) and a leaderboard.
+- **Live** — tracks real QR scan visits from physical devices, enriched with geo-location (country, city) and browser/OS data. Includes a shareable QR code and per-device visit history.
 
 ---
 
 ## Assumptions
 
-These are the design boundaries I defined for this implementation:
-
-- **Customer ID is device-supplied.** The physical device (out of scope) generates a stable unique identifier (e.g., MAC address or UUID) and includes it in every visit event. The service does not issue or validate tokens — it trusts the device.
-- **Every POST counts as a visit.** No deduplication window is applied. If the same device sends two events in quick succession (e.g., a noisy sensor), both are counted. A deduplication layer would live in the physical device firmware or an upstream gateway, not here.
-- **The threshold is global.** The configurable `visits_per_tree` value applies equally to every customer. There is no per-shop or per-customer override.
-- **Threshold changes are forward-only.** Updating the threshold via `PATCH /api/v1/config` affects future visits only. Past earned trees are not recalculated. A customer who earned 1 tree at 10 visits retains it if the threshold later changes to 5.
-- **`last_seen` = most recent visit timestamp.** The spec asks to "store the last connection time"; this is the `created_at` of the most recent row in the `visits` table for that customer.
-- **Hourly aggregation covers a rolling 24-hour window.** The chart shows the last 24 complete-or-partial hours, not a calendar day boundary. Hours with zero visits are included as 0 so the chart shape is always consistent.
-- **Single-node deployment.** SQLite's single-writer model is assumed. See [DECISIONS.md](./DECISIONS.md) for the migration path to PostgreSQL + Redis if the load exceeds ~100k writes/day.
+- **Customer ID is device-supplied.** The physical device generates a stable unique identifier (e.g., MAC address or UUID). The service trusts it — no token issuance or validation.
+- **Every POST counts as a visit.** No deduplication window. If the same device sends two events in quick succession, both are counted. Deduplication belongs in device firmware or an upstream gateway.
+- **The threshold is global.** `visits_per_tree` applies equally to every customer — no per-shop or per-customer override.
+- **Threshold changes are forward-only.** `PATCH /api/v1/config` affects future visits only. Past earned trees are not recalculated.
+- **`last_seen` = most recent visit timestamp.** Stored as the `visited_at` of the most recent visits row for that customer.
+- **Single-node deployment.** SQLite's single-writer model is assumed. See [DECISIONS.md](./DECISIONS.md) for the PostgreSQL + Redis migration path.
 
 ---
 
@@ -31,21 +33,27 @@ Browser
    │
    ▼ :80
 ┌─────────────────────┐
-│   nginx (Alpine)    │  Serves the Vue SPA
-│                     │  Proxies /api/* → backend
+│   nginx (Alpine)    │  Serves Vue SPA + proxies /api/* → backend
 └──────────┬──────────┘
            │ http://backend:3000
            ▼
-┌─────────────────────┐
-│  Fastify (Node 20)  │  REST API
-│  TypeScript strict  │  Swagger UI → /docs (dev only)
-│  Rate limit 100/min │  Graceful SIGTERM shutdown
-└──────────┬──────────┘
+┌─────────────────────────────────────────┐
+│  Fastify (Node 20) · TypeScript strict  │
+│  Per-route rate limits (writes only)    │
+│  Security headers on every response     │
+│  Swagger UI → /docs  (dev only)         │
+│  Graceful SIGTERM shutdown              │
+└──────────┬──────────────────────────────┘
            │
            ▼
 ┌─────────────────────┐
 │   SQLite (WAL mode) │  customers · visits · app_config
 │   better-sqlite3    │  Auto-created on first start
+└─────────────────────┘
+           │ async (setImmediate)
+           ▼
+┌─────────────────────┐
+│   ip-api.com        │  Geo enrichment — never blocks response
 └─────────────────────┘
 ```
 
@@ -55,15 +63,17 @@ Browser
 
 | Layer | Technology | Version |
 |---|---|---|
-| API framework | Fastify | 4.x |
+| API framework | Fastify + plugins | 4.x |
 | Backend runtime | Node.js LTS | 20.x |
-| Database | SQLite via better-sqlite3 | WAL mode |
+| Database | SQLite via better-sqlite3 (WAL) | — |
 | Backend language | TypeScript strict | 5.x |
 | Tests | Vitest + SQLite `:memory:` | 1.x |
 | Frontend framework | Vue 3 Composition API | 3.5 |
 | Build tool | Vite + vue-tsc | 5.x |
-| Styling | Tailwind CSS (Tree-Nation brand tokens) | 3.x |
+| Styling | Tailwind CSS (Tree-Nation brand) | 3.x |
 | Charts | Chart.js | 4.x |
+| QR codes | qrcode | — |
+| Celebrations | canvas-confetti | — |
 | Container | Docker multi-stage + nginx:alpine | — |
 
 ---
@@ -73,14 +83,14 @@ Browser
 ### Option A — Docker (zero setup)
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 - Dashboard → **http://localhost:80**
 - API → **http://localhost:3000**
+- API docs → **http://localhost:3000/docs** (dev mode only)
 
-> ⚠️ **Node 20 LTS required.** `better-sqlite3` ships prebuilt binaries only for Node 20.
-> Node 22 or 24 will fail at `npm install`. Fix: `nvm install 20 && nvm use 20`.
+> **Node 20 LTS required for local dev.** `better-sqlite3` ships prebuilt binaries only for Node 20. Fix: `nvm install 20 && nvm use 20`.
 
 ---
 
@@ -95,9 +105,6 @@ npm install
 npm run dev
 ```
 
-- API runs at **http://localhost:3000**
-- Swagger UI at **http://localhost:3000/docs**
-
 **Frontend** (new terminal)
 
 ```bash
@@ -107,23 +114,30 @@ npm install
 npm run dev
 ```
 
-- Dashboard at **http://localhost:5173**
-
-The Vite dev server proxies `/api/*` to `localhost:3000` automatically — no CORS setup needed.
+- Dashboard → **http://localhost:5173**
+- Vite proxies `/api/*` to `localhost:3000` — no CORS config needed.
 
 ---
 
 ## API reference
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/v1/visits` | Record a visit — returns milestone status |
-| `GET` | `/api/v1/customers/:id` | Per-customer stats |
-| `GET` | `/api/v1/visits/hourly` | Hourly visit counts for the last 24 h |
-| `GET` | `/api/v1/stats` | Aggregate totals across all customers |
-| `GET` | `/api/v1/config` | Current `visits_per_tree` setting |
-| `PATCH` | `/api/v1/config` | Update threshold at runtime (no restart needed) |
-| `GET` | `/health` | Health check — no DB dependency |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/visits` | — | Record a device visit — returns milestone status |
+| `GET` | `/api/v1/visits/scan/:customerId` | — | Record a visit via QR scan — enriches with geo + UA |
+| `GET` | `/api/v1/visits/recent` | — | Recent visits (`?filter=real` or `?filter=demo`) |
+| `GET` | `/api/v1/visits/chart` | — | Chart data (`?range=24h\|7d\|30d&filter=all\|real`) |
+| `GET` | `/api/v1/visits/hourly` | — | Hourly counts for the last 24 h |
+| `GET` | `/api/v1/customers` | — | All customers, sorted by trees then visit progress |
+| `GET` | `/api/v1/customers/:id` | — | Per-customer stats |
+| `GET` | `/api/v1/stats` | — | Aggregate totals (all visits) |
+| `GET` | `/api/v1/stats/live` | — | Aggregate totals (real QR scans only) |
+| `GET` | `/api/v1/config` | — | Current `visits_per_tree` |
+| `PATCH` | `/api/v1/config` | `ADMIN_SECRET` | Update threshold at runtime |
+| `POST` | `/api/v1/reset` | `ADMIN_SECRET` | Reset and reseed demo data |
+| `GET` | `/health` | — | Health check — no DB dependency |
+
+> When `ADMIN_SECRET` is set, protected endpoints require the header `x-admin-secret: <secret>`. If unset (local dev), the check is skipped.
 
 ### Request / response examples
 
@@ -166,6 +180,7 @@ curl http://localhost:3000/api/v1/customers/device-abc123
 ```bash
 curl -X PATCH http://localhost:3000/api/v1/config \
   -H "Content-Type: application/json" \
+  -H "x-admin-secret: your-secret" \
   -d '{"visitsPerTree": 5}'
 ```
 
@@ -182,8 +197,9 @@ The new value takes effect on the very next visit — no container restart requi
 | `PORT` | `3000` | Server port |
 | `VISITS_PER_TREE` | `10` | Initial visits needed to earn a tree |
 | `DB_PATH` | `./data/visits.db` | SQLite file path (directory auto-created) |
-| `NODE_ENV` | `development` | Disables Swagger UI when set to `production` |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated list of allowed origins |
+| `NODE_ENV` | `development` | Disables Swagger UI when `production` |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed origins |
+| `ADMIN_SECRET` | _(empty)_ | If set, required as `x-admin-secret` header on `PATCH /config` and `POST /reset` |
 
 ### Frontend (`.env`)
 
@@ -200,49 +216,43 @@ cd backend
 npm test
 ```
 
-9 unit tests covering: first visit, counter accumulation, milestone detection, `trees_planted` increment, post-milestone reset, and config changes. Each test gets a fresh SQLite `:memory:` instance — no state leaks, runs in ~400 ms.
+9 unit tests covering: first visit, counter accumulation, milestone detection, `trees_planted` increment, post-milestone reset, and config changes. Each test uses a fresh SQLite `:memory:` instance — no state leaks, runs in ~400 ms.
 
 ---
 
 ## Troubleshooting
 
-### `better-sqlite3` fails to install / rebuild error
+### `better-sqlite3` fails to install
 
-This package uses native bindings compiled for a specific Node.js ABI. **Only Node 20 LTS has prebuilt binaries.** If you are on Node 22 or 24:
+This package uses native bindings compiled for a specific Node.js ABI. **Only Node 20 LTS has prebuilt binaries.**
 
 ```bash
-nvm install 20
-nvm use 20
+nvm install 20 && nvm use 20
 cd backend && npm install
 ```
 
-If `nvm` is not installed: https://github.com/nvm-sh/nvm
-
-### Docker port 80 is already in use
-
-Edit `docker-compose.yml` and change the host port:
+### Docker port 80 already in use
 
 ```yaml
+# docker-compose.yml
 ports:
-  - "8080:80"   # use any free port
+  - "8080:80"
 ```
 
 Then access the dashboard at `http://localhost:8080`.
 
 ### Dashboard shows "Cannot reach the API"
 
-Make sure both services are running. In Docker, check container health:
-
 ```bash
-docker-compose ps
-docker-compose logs backend
+docker compose ps
+docker compose logs backend
 ```
 
-In local dev, confirm the backend is on port 3000 and the frontend Vite proxy is configured (it is by default in `vite.config.ts`).
+In local dev, confirm the backend is on port 3000 and the Vite proxy is configured (`vite.config.ts`).
 
 ### SQLite `SQLITE_CANTOPEN` in local dev
 
-The `data/` directory is created automatically on startup via `fs.mkdirSync`. If you still see this error, check write permissions on the project directory.
+The `data/` directory is created automatically on startup. If the error persists, check write permissions on the project directory.
 
 ---
 
@@ -252,24 +262,26 @@ The `data/` directory is created automatically on startup via `fs.mkdirSync`. If
 .
 ├── backend/
 │   ├── src/
-│   │   ├── config/          # Env-backed config with validation
-│   │   ├── db/              # SQLite singleton, WAL setup, migrations
-│   │   ├── routes/          # Fastify route handlers (visits, customers, config, stats)
-│   │   ├── services/        # visitService — core business logic
-│   │   └── utils/           # date.ts — shared SQLite → ISO formatter
-│   └── tests/               # Vitest unit tests (SQLite :memory:)
+│   │   ├── config/        # Env-backed config object
+│   │   ├── db/            # SQLite singleton, WAL setup, migrations, seed
+│   │   ├── routes/        # visits, customers, config (Fastify route handlers)
+│   │   ├── services/      # visitService — atomic transaction business logic
+│   │   └── utils/         # date.ts, geo.ts (ip-api lookup + language parsing)
+│   └── tests/             # Vitest unit tests (SQLite :memory:)
 │
 ├── frontend/
 │   └── src/
-│       ├── components/      # StatsCard, TreeCounter, VisitsChart, CustomerLookup,
-│       │                    # LiveIndicator, SkeletonCard
-│       ├── composables/     # useVisitsData (polling + state), useCountUp (animation)
-│       ├── lib/             # apiFetch — typed fetch wrapper with ApiError class
-│       ├── types/           # Shared API response interfaces
-│       └── views/           # Dashboard.vue
+│       ├── components/    # StatsCard, VisitsChart, CustomerLeaderboard,
+│       │                  # EventSimulator, LiveDashboard, GrowingTree,
+│       │                  # LiveIndicator, SkeletonCard
+│       ├── composables/   # useVisitsData — polling, state, cleanup
+│       ├── lib/           # apiFetch — typed fetch wrapper + ApiError
+│       ├── types/         # Shared API response interfaces
+│       └── views/         # Dashboard.vue (Demo + Live tabs), TrackView.vue
 │
+├── frontend/public/       # Static assets (Tree-Nation logo)
 ├── docker-compose.yml
-├── DECISIONS.md             # Architecture and technology rationale
+├── DECISIONS.md           # Architecture and technology rationale
 └── README.md
 ```
 
@@ -277,11 +289,14 @@ The `data/` directory is created automatically on startup via `fs.mkdirSync`. If
 
 ## Key design decisions
 
-A full rationale for every technology choice is in [`DECISIONS.md`](./DECISIONS.md), including:
+Full rationale for every major choice is in [`DECISIONS.md`](./DECISIONS.md):
 
 - Why SQLite over PostgreSQL for this use case
 - Why `db.transaction()` is critical for correct milestone counting
-- Why polling instead of WebSockets for the dashboard
+- Why polling instead of WebSockets
+- Rate limiting strategy — why only write endpoints are limited
+- Security headers and the `ADMIN_SECRET` protection pattern
+- Async geo enrichment — why it never blocks the visit response
 - What would change at 10M+ visits/day
 
 ---

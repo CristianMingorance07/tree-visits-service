@@ -6,4 +6,5 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:8080')
     .split(',')
     .map((s) => s.trim()),
+  adminSecret: process.env.ADMIN_SECRET ?? '',
 } as const;

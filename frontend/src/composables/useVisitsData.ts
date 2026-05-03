@@ -1,7 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../lib/api';
 import type {
-  HourlyDataPoint,
   HourlyResponse,
   StatsResponse,
   ConfigResponse,
@@ -23,7 +22,6 @@ interface LiveStatsResponse {
 }
 
 export function useVisitsData() {
-  const chartData = ref<HourlyDataPoint[]>([]);
   const totalVisits24h = ref(0);
   const totalTreesPlanted = ref(0);
   const totalCustomers = ref(0);
@@ -31,6 +29,7 @@ export function useVisitsData() {
   const visitsPerTree = ref(10);
   const customers = ref<CustomerListItem[]>([]);
   const recentScans = ref<RecentScan[]>([]);
+  const demoScans = ref<RecentScan[]>([]);
   const liveVisits24h = ref(0);
   const liveDevices = ref(0);
   const liveTrees = ref(0);
@@ -44,16 +43,16 @@ export function useVisitsData() {
 
   async function fetchData() {
     try {
-      const [hourly, stats, config, customerList, recent, liveStats] = await Promise.all([
+      const [hourly, stats, config, customerList, recent, liveStats, demoFeed] = await Promise.all([
         apiFetch<HourlyResponse>('/api/v1/visits/hourly'),
         apiFetch<StatsResponse>('/api/v1/stats'),
         apiFetch<ConfigResponse>('/api/v1/config'),
         apiFetch<CustomersListResponse>('/api/v1/customers'),
-        apiFetch<RecentScansResponse>('/api/v1/visits/recent'),
+        apiFetch<RecentScansResponse>('/api/v1/visits/recent?filter=real'),
         apiFetch<LiveStatsResponse>('/api/v1/stats/live'),
+        apiFetch<RecentScansResponse>('/api/v1/visits/recent?filter=demo'),
       ]);
 
-      chartData.value = hourly.data;
       totalVisits24h.value = hourly.totalVisits24h;
       totalTreesPlanted.value = stats.totalTreesPlanted;
       totalCustomers.value = stats.totalCustomers;
@@ -61,6 +60,7 @@ export function useVisitsData() {
       visitsPerTree.value = config.visitsPerTree;
       customers.value = customerList.customers;
       recentScans.value = recent.scans;
+      demoScans.value = demoFeed.scans;
       liveVisits24h.value = liveStats.realVisits24h;
       liveDevices.value = liveStats.realDevices;
       liveTrees.value = liveStats.realTrees;
@@ -94,6 +94,7 @@ export function useVisitsData() {
     visitsPerTree,
     customers,
     recentScans,
+    demoScans,
     liveVisits24h,
     liveDevices,
     liveTrees,

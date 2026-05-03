@@ -59,6 +59,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{ Body: PostVisitBody }>(
     '/api/v1/visits',
     {
+      config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
       schema: {
         tags: ['Visits'],
         summary: 'Record a visit event from a device',
@@ -66,7 +67,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['customerId'],
           properties: {
-            customerId: { type: 'string', minLength: 1, maxLength: 100 },
+            customerId: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_\\-\\.]+$' },
           },
           additionalProperties: false,
         },
@@ -93,6 +94,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get<{ Params: ScanParams }>(
     '/api/v1/visits/scan/:customerId',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         tags: ['Visits'],
         summary: 'Record a visit via QR scan — returns visit result as JSON',
@@ -152,12 +154,16 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
-  fastify.get(
+  fastify.get<{ Querystring: { filter?: string } }>(
     '/api/v1/visits/recent',
     {
       schema: {
         tags: ['Visits'],
-        summary: 'Last 20 visits recorded via QR scan (with device info)',
+        summary: 'Recent visits — filter=real (QR scans) or filter=demo (simulator devices)',
+        querystring: {
+          type: 'object',
+          properties: { filter: { type: 'string', enum: ['real', 'demo'] } },
+        },
         response: {
           200: {
             type: 'object',
@@ -191,8 +197,39 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
         },
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       const db = getDb();
+      const filter = request.query.filter ?? 'real';
+
+      if (filter === 'demo') {
+        const DEMO_INFO: Record<string, { type: string; name: string }> = {
+          'device-store-01': { type: 'mobile',  name: 'Mobile A' },
+          'device-store-02': { type: 'mobile',  name: 'Mobile C' },
+          'device-store-03': { type: 'mobile',  name: 'Mobile B' },
+          'device-store-05': { type: 'tablet',  name: 'Tablet A' },
+          'device-store-07': { type: 'desktop', name: 'Desktop A' },
+          'device-store-08': { type: 'desktop', name: 'Desktop B' },
+        };
+        interface DemoRow { id: number; customer_id: string; visited_at: string; }
+        const rows = db.prepare(
+          `SELECT id, customer_id, visited_at FROM visits
+           WHERE customer_id LIKE 'device-store-%'
+           ORDER BY visited_at DESC LIMIT 100`,
+        ).all() as DemoRow[];
+        return reply.send({
+          scans: rows.map(r => {
+            const info = DEMO_INFO[r.customer_id] ?? { type: 'desktop', name: r.customer_id };
+            return {
+              id: r.id,
+              customerId: r.customer_id,
+              visitedAt: toISO(r.visited_at),
+              device: { type: info.type, os: 'Simulator', browser: 'Demo', brand: info.name },
+              country: null, countryCode: null, city: null, language: null,
+            };
+          }),
+        });
+      }
+
       const rows = db
         .prepare(
           `SELECT id, customer_id, visited_at, user_agent, ip,

@@ -1,18 +1,14 @@
 <template>
   <div class="space-y-4">
 
-    <!-- Share card -->
-    <div class="card-accent p-6">
+    <!-- Share card (live tab only) -->
+    <div v-if="mode !== 'demo'" class="card-accent p-6">
       <Transition name="mode" mode="out-in">
 
         <!-- Empty: hero QR -->
         <div v-if="!scans.length" key="empty" class="text-center">
           <div class="flex justify-center mb-5">
-            <div class="w-14 h-14 rounded-[20px] bg-[#3aaa68] flex items-center justify-center shadow-lg shadow-[#3aaa68]/30">
-              <svg class="w-8 h-8" viewBox="0 0 36 44" fill="none">
-                <path d="M18 1L1 18.5H9.5L3 30H13V43H23V30H33L26.5 18.5H35L18 1Z" fill="white" fill-rule="evenodd"/>
-              </svg>
-            </div>
+            <img src="/tree-nation-icon.png" alt="Tree-Nation" class="w-14 h-14" />
           </div>
           <h2 class="text-xl font-black text-gray-900 mb-2">Start tracking real visits</h2>
           <p class="text-gray-400 text-sm mb-8 max-w-xs mx-auto">
@@ -72,7 +68,10 @@
         <div>
           <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">Live Device Feed</h2>
           <p class="text-gray-400 text-[10px] mt-0.5">
-            {{ deviceGroups.length ? `${deviceGroups.length} device${deviceGroups.length !== 1 ? 's' : ''} · ${scans.length} total scans` : 'Real device visits · updates automatically' }}
+            {{ deviceGroups.length
+            ? `${deviceGroups.length} device${deviceGroups.length !== 1 ? 's' : ''} · ${scans.length} total ${mode === 'demo' ? 'visits' : 'scans'}`
+            : mode === 'demo' ? 'Simulated device activity · updates automatically' : 'Real device visits · updates automatically'
+          }}
           </p>
         </div>
         <div class="flex items-center gap-1.5">
@@ -84,9 +83,14 @@
       <!-- Empty -->
       <div v-if="!deviceGroups.length" class="flex flex-col items-center justify-center text-center py-12">
         <div class="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-2xl mb-3">📡</div>
-        <p class="text-gray-500 text-xs font-semibold mb-1">Waiting for real scans</p>
+        <p class="text-gray-500 text-xs font-semibold mb-1">
+          {{ mode === 'demo' ? 'No simulator activity yet' : 'Waiting for real scans' }}
+        </p>
         <p class="text-gray-300 text-[10px] leading-relaxed max-w-[180px]">
-          Scan or share the QR above — device visits will appear here instantly
+          {{ mode === 'demo'
+            ? 'Click a device in the simulator above — visits will appear here instantly'
+            : 'Scan or share the QR above — device visits will appear here instantly'
+          }}
         </p>
       </div>
 
@@ -211,6 +215,7 @@ import type { RecentScan } from '../types/api';
 const props = defineProps<{
   scans: RecentScan[];
   visitsPerTree: number;
+  mode?: 'demo' | 'live';
 }>();
 
 const qrDataUrl = ref<string | null>(null);
@@ -248,7 +253,6 @@ const deviceGroups = computed<DeviceGroup[]>(() => {
         lastVisit: scan.visitedAt,
       });
     } else {
-      // Update geo from most recent scan that has it
       const g = map.get(scan.customerId)!;
       if (!g.country && scan.country) {
         g.country = scan.country;

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { getDb } from '../db';
+import { config } from '../config';
 
 interface PatchConfigBody {
   visitsPerTree: number;
@@ -60,6 +61,12 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
+      if (config.adminSecret) {
+        const provided = request.headers['x-admin-secret'];
+        if (provided !== config.adminSecret) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+      }
       const { visitsPerTree } = request.body;
       const db = getDb();
       db.prepare(`UPDATE app_config SET value = ? WHERE key = 'visits_per_tree'`).run(

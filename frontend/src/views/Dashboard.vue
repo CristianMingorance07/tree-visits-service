@@ -5,31 +5,18 @@
       <!-- Header -->
       <header class="text-center mb-8 animate-fade-up">
         <div class="flex justify-center mb-5">
-          <div class="w-16 h-16 rounded-3xl bg-[#3aaa68] flex items-center justify-center shadow-lg shadow-[#3aaa68]/30">
-            <svg class="w-9 h-9" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 1L1 18.5H9.5L3 30H13V43H23V30H33L26.5 18.5H35L18 1Z" fill="white" fill-rule="evenodd"/>
-            </svg>
-          </div>
+          <img
+            src="/tree-nation-icon.png"
+            alt="Tree-Nation"
+            class="w-20 h-20"
+          />
         </div>
         <h1 class="text-4xl font-black text-gray-900 tracking-tight leading-none mb-3">
-          X Visits&nbsp;=&nbsp;<span class="text-brand-gradient">1 Tree</span>
+          {{ visitsPerTree }} Visits&nbsp;=&nbsp;<span class="text-[#48C4D8]">1</span>&nbsp;<span class="text-[#3aaa68]">Tree</span>
         </h1>
-        <p class="text-gray-400 text-sm font-medium mb-4">
+        <p class="text-gray-400 text-sm font-medium">
           Real-time reforestation tracker &middot; Tree-Nation
         </p>
-        <Transition name="badge">
-          <div
-            v-if="visitsPerTree > 0"
-            class="inline-flex items-center gap-1.5 bg-[#3aaa68]/10 border border-[#3aaa68]/20
-                   text-[#3aaa68] text-xs font-semibold px-3.5 py-1.5 rounded-full"
-          >
-            <svg class="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-              <circle cx="6" cy="6" r="5" fill="currentColor" opacity="0.2"/>
-              <circle cx="6" cy="6" r="2.5" fill="currentColor"/>
-            </svg>
-            Every {{ visitsPerTree }} visits plants 1 tree
-          </div>
-        </Transition>
       </header>
 
       <!-- Tab switcher -->
@@ -51,10 +38,10 @@
               ? 'bg-white shadow text-gray-900'
               : 'text-gray-400 hover:text-gray-600'"
           >
-            <span
-              v-if="recentScans.length"
-              class="w-1.5 h-1.5 rounded-full bg-[#3aaa68] animate-pulse"
-            />
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3aaa68] opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-[#3aaa68]"></span>
+            </span>
             Live
           </button>
         </div>
@@ -121,6 +108,12 @@
               </div>
 
               <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
+
+              <LiveDashboard
+                mode="demo"
+                :scans="demoScans"
+                :visits-per-tree="visitsPerTree"
+              />
 
               <CustomerLeaderboard
                 :customers="demoCustomers"
@@ -209,6 +202,7 @@ const {
   visitsPerTree,
   customers,
   recentScans,
+  demoScans,
   liveVisits24h,
   liveDevices,
   liveTrees,
@@ -221,14 +215,6 @@ const {
 </script>
 
 <style scoped>
-.badge-enter-active {
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-.badge-enter-from {
-  opacity: 0;
-  transform: translateY(4px) scale(0.95);
-}
-
 .dashboard-enter-active,
 .dashboard-leave-active {
   transition: opacity 0.35s ease, transform 0.35s ease;
