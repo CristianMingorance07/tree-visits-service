@@ -20,6 +20,7 @@
           </span>
         </Transition>
         <button
+          v-if="isDev"
           @click="handleReset"
           :disabled="resetting"
           class="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all duration-200
@@ -162,6 +163,7 @@ import type { VisitResponse, CustomerResponse } from '../types/api';
 
 const props = defineProps<{ visitsPerTree: number }>();
 const emit = defineEmits<{ 'visit-recorded': [] }>();
+const isDev = import.meta.env.DEV;
 
 interface DeviceState {
   id: string;

@@ -102,7 +102,7 @@ Every HTTP response carries three headers added via a Fastify `onSend` hook:
 - `X-Frame-Options: DENY` — blocks the app from being embedded in iframes (clickjacking)
 - `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage on cross-origin navigations
 
-Destructive endpoints (`POST /api/v1/reset`, `PATCH /api/v1/config`) are protected by an optional `ADMIN_SECRET` environment variable. When set, the server requires the `x-admin-secret` header to match. When unset (local development), the check is skipped entirely — no friction during development, protected in production by setting the env var in the deployment environment. This is intentionally lightweight: the service does not need full authentication, only protection against accidental or malicious reset/reconfiguration in a live environment.
+Destructive endpoints (`POST /api/v1/reset`, `PATCH /api/v1/config`) are protected by an `ADMIN_SECRET` environment variable. In production the server refuses to start without it; in local development it may be left empty to avoid friction. When set, the server requires the `x-admin-secret` header to match. This is intentionally lightweight: the public dashboard does not need full authentication, only protection against accidental or malicious reset/reconfiguration in a live environment.
 
 ---
 

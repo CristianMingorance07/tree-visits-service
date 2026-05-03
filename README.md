@@ -88,7 +88,8 @@ docker compose up --build
 
 - Dashboard → **http://localhost:8080**
 - API → **http://localhost:3000**
-- API docs → **http://localhost:3000/docs** (dev mode only)
+
+Docker Compose runs the backend with `NODE_ENV=production` and a local fallback `ADMIN_SECRET`. For real deployments, set a strong `ADMIN_SECRET` in the environment instead of relying on the local default.
 
 > **Node 20 LTS required for local dev.** `better-sqlite3` ships prebuilt binaries only for Node 20. Fix: `nvm install 20 && nvm use 20`.
 
@@ -137,7 +138,7 @@ npm run dev
 | `POST` | `/api/v1/reset` | `ADMIN_SECRET` | Reset and reseed demo data |
 | `GET` | `/health` | — | Health check — no DB dependency |
 
-> When `ADMIN_SECRET` is set, protected endpoints require the header `x-admin-secret: <secret>`. If unset (local dev), the check is skipped.
+> The dashboard and read-only statistics are public. Only destructive/admin actions are protected. In production, `ADMIN_SECRET` is required and protected endpoints require the header `x-admin-secret: <secret>`. In local development, leaving it empty keeps admin actions frictionless.
 
 ### Request / response examples
 
@@ -199,7 +200,7 @@ The new value takes effect on the very next visit — no container restart requi
 | `DB_PATH` | `./data/visits.db` | SQLite file path (directory auto-created) |
 | `NODE_ENV` | `development` | Disables Swagger UI when `production` |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed origins |
-| `ADMIN_SECRET` | _(empty)_ | If set, required as `x-admin-secret` header on `PATCH /config` and `POST /reset` |
+| `ADMIN_SECRET` | _(empty)_ | Required in production. Sent as `x-admin-secret` on `PATCH /config` and `POST /reset` |
 
 ### Frontend (`.env`)
 
@@ -264,6 +265,7 @@ The `data/` directory is created automatically on startup. If the error persists
 │   ├── src/
 │   │   ├── config/        # Env-backed config object
 │   │   ├── db/            # SQLite singleton, WAL setup, migrations, seed
+│   │   ├── repositories/  # Small data-access functions; SQL stays out of routes/services
 │   │   ├── routes/        # visits, customers, config (Fastify route handlers)
 │   │   ├── services/      # visitService — atomic transaction business logic
 │   │   └── utils/         # date.ts, geo.ts (ip-api lookup + language parsing)

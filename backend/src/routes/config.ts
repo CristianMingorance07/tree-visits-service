@@ -1,13 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { getDb } from '../db';
 import { config } from '../config';
+import { getVisitsPerTree, updateVisitsPerTree } from '../repositories/configRepository';
 
 interface PatchConfigBody {
   visitsPerTree: number;
-}
-
-interface ConfigRow {
-  value: string;
 }
 
 export async function configRoutes(fastify: FastifyInstance): Promise<void> {
@@ -28,11 +24,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (_request, reply) => {
-      const db = getDb();
-      const row = db
-        .prepare(`SELECT value FROM app_config WHERE key = 'visits_per_tree'`)
-        .get() as ConfigRow;
-      return reply.send({ visitsPerTree: parseInt(row.value, 10) });
+      return reply.send({ visitsPerTree: getVisitsPerTree() });
     }
   );
 
@@ -68,10 +60,7 @@ export async function configRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
       const { visitsPerTree } = request.body;
-      const db = getDb();
-      db.prepare(`UPDATE app_config SET value = ? WHERE key = 'visits_per_tree'`).run(
-        String(visitsPerTree)
-      );
+      updateVisitsPerTree(visitsPerTree);
       return reply.send({ visitsPerTree });
     }
   );

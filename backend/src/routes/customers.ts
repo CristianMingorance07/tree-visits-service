@@ -1,20 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { getDb } from '../db';
 import { toISO } from '../utils/date';
+import { getVisitsPerTree } from '../repositories/configRepository';
+import { getCustomerById, listCustomers } from '../repositories/customerRepository';
 
 interface CustomerParams {
   customerId: string;
-}
-
-interface CustomerRow {
-  id: string;
-  total_visits: number;
-  trees_planted: number;
-  last_seen: string;
-}
-
-interface ConfigRow {
-  value: string;
 }
 
 export async function customersRoutes(fastify: FastifyInstance): Promise<void> {
@@ -47,19 +37,8 @@ export async function customersRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (_request, reply) => {
-      const db = getDb();
-
-      const configRow = db
-        .prepare(`SELECT value FROM app_config WHERE key = 'visits_per_tree'`)
-        .get() as ConfigRow | undefined;
-
-      if (!configRow) return reply.status(500).send({ error: 'Internal server error' });
-
-      const visitsPerTree = parseInt(configRow.value, 10);
-
-      const rows = db
-        .prepare(`SELECT id, total_visits, trees_planted, last_seen FROM customers ORDER BY trees_planted DESC, total_visits DESC`)
-        .all() as CustomerRow[];
+      const visitsPerTree = getVisitsPerTree();
+      const rows = listCustomers();
 
       const customers = rows.map(c => {
         const mod = c.total_visits % visitsPerTree;
@@ -114,25 +93,13 @@ export async function customersRoutes(fastify: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const { customerId } = request.params;
-      const db = getDb();
-
-      const customer = db
-        .prepare(`SELECT id, total_visits, trees_planted, last_seen FROM customers WHERE id = ?`)
-        .get(customerId) as CustomerRow | undefined;
+      const customer = getCustomerById(customerId);
 
       if (!customer) {
         return reply.status(404).send({ error: 'Customer not found' });
       }
 
-      const configRow = db
-        .prepare(`SELECT value FROM app_config WHERE key = 'visits_per_tree'`)
-        .get() as ConfigRow | undefined;
-
-      if (!configRow) {
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-
-      const visitsPerTree = parseInt(configRow.value, 10);
+      const visitsPerTree = getVisitsPerTree();
       const visitsUntilNextTree = visitsPerTree - (customer.total_visits % visitsPerTree);
 
       return reply.send({

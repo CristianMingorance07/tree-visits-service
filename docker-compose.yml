@@ -10,6 +10,7 @@ services:
       VISITS_PER_TREE: 10
       DB_PATH: /app/data/visits.db
       NODE_ENV: production
+      ADMIN_SECRET: ${ADMIN_SECRET:-local-dev-admin-secret}
     restart: unless-stopped
     healthcheck:
       test:

@@ -1,28 +1,23 @@
 import { FastifyInstance } from 'fastify';
 import { registerVisit, enrichVisit } from '../services/visitService';
-import { getDb } from '../db';
 import { toISO } from '../utils/date';
 import { lookupGeo, parseLanguage } from '../utils/geo';
+import { getVisitsPerTree } from '../repositories/configRepository';
+import { getAggregateStats, getTrackedTreesPlanted } from '../repositories/customerRepository';
+import {
+  countTrackedDevices,
+  countTrackedVisits24h,
+  listChartRows,
+  listDemoVisits,
+  listHourlyVisitCounts,
+  listTrackedVisits,
+  type ChartFilter,
+  type ChartRange,
+} from '../repositories/visitRepository';
 
 interface TrackParams { customerId: string; }
-interface ConfigRow { value: string; }
 interface PostVisitBody { customerId: string; }
-interface HourlyRow { hour: string; count: number; }
-interface StatsRow { totalTreesPlanted: number; totalCustomers: number; totalVisits: number; }
-interface ChartQuerystring { range?: string; filter?: string; }
-interface ChartRow { label: string; count: number; }
-interface LiveTreesRow { realTrees: number; }
-interface RecentRow {
-  id: number;
-  customer_id: string;
-  visited_at: string;
-  user_agent: string | null;
-  ip: string | null;
-  country: string | null;
-  country_code: string | null;
-  city: string | null;
-  language: string | null;
-}
+interface ChartQuerystring { range?: ChartRange; filter?: ChartFilter; }
 
 const CUSTOMER_ID_SCHEMA = {
   type: 'string',
@@ -139,9 +134,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
 
       const result = registerVisit(customerId, { userAgent: ua || undefined, ip: ip || undefined });
 
-      const db = getDb();
-      const cfg = db.prepare(`SELECT value FROM app_config WHERE key = 'visits_per_tree'`).get() as ConfigRow;
-      const visitsPerTree = parseInt(cfg.value, 10);
+      const visitsPerTree = getVisitsPerTree();
       const mod = result.totalVisits % visitsPerTree;
       const visitsUntilNextTree = mod === 0 ? visitsPerTree : visitsPerTree - mod;
 
@@ -218,7 +211,6 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
-      const db = getDb();
       const filter = request.query.filter ?? 'real';
 
       if (filter === 'demo') {
@@ -230,12 +222,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
           'device-store-07': { type: 'desktop', name: 'Desktop A' },
           'device-store-08': { type: 'desktop', name: 'Desktop B' },
         };
-        interface DemoRow { id: number; customer_id: string; visited_at: string; }
-        const rows = db.prepare(
-          `SELECT id, customer_id, visited_at FROM visits
-           WHERE customer_id LIKE 'device-store-%'
-           ORDER BY visited_at DESC LIMIT 100`,
-        ).all() as DemoRow[];
+        const rows = listDemoVisits();
         return reply.send({
           visits: rows.map(r => {
             const info = DEMO_INFO[r.customer_id] ?? { type: 'desktop', name: r.customer_id };
@@ -250,16 +237,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const rows = db
-        .prepare(
-          `SELECT id, customer_id, visited_at, user_agent, ip,
-                  country, country_code, city, language
-           FROM visits
-           WHERE user_agent IS NOT NULL
-           ORDER BY visited_at DESC
-           LIMIT 100`,
-        )
-        .all() as RecentRow[];
+      const rows = listTrackedVisits();
 
       return reply.send({
         visits: rows.map(r => ({
@@ -303,18 +281,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (_request, reply) => {
-      const db = getDb();
-      const rows = db
-        .prepare(
-          `SELECT
-            strftime('%Y-%m-%dT%H:00:00.000Z', visited_at) as hour,
-            COUNT(*) as count
-          FROM visits
-          WHERE visited_at >= datetime('now', '-24 hours')
-          GROUP BY strftime('%Y-%m-%dT%H', visited_at)
-          ORDER BY hour ASC`,
-        )
-        .all() as HourlyRow[];
+      const rows = listHourlyVisitCounts();
       return reply.send({ data: rows, totalVisits24h: rows.reduce((s, r) => s + r.count, 0) });
     },
   );
@@ -338,17 +305,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (_request, reply) => {
-      const db = getDb();
-      const stats = db
-        .prepare(
-          `SELECT
-            COALESCE(SUM(trees_planted), 0) as totalTreesPlanted,
-            COUNT(*) as totalCustomers,
-            COALESCE(SUM(total_visits), 0) as totalVisits
-          FROM customers`,
-        )
-        .get() as StatsRow;
-      return reply.send(stats);
+      return reply.send(getAggregateStats());
     },
   );
 
@@ -371,26 +328,11 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (_request, reply) => {
-      const db = getDb();
-      const realVisits24h = (db.prepare(
-        `SELECT COUNT(*) as cnt FROM visits WHERE user_agent IS NOT NULL AND visited_at >= datetime('now', '-24 hours')`,
-      ).get() as { cnt: number }).cnt;
-
-      const perDevice = db.prepare(
-        `SELECT COUNT(*) as cnt FROM visits WHERE user_agent IS NOT NULL GROUP BY customer_id`,
-      ).all() as { cnt: number }[];
-
-      const realDevices = perDevice.length;
-      const { realTrees } = db.prepare(`
-        SELECT COALESCE(SUM(c.trees_planted), 0) as realTrees
-        FROM customers c
-        WHERE EXISTS (
-          SELECT 1 FROM visits v
-          WHERE v.customer_id = c.id AND v.user_agent IS NOT NULL
-        )
-      `).get() as LiveTreesRow;
-
-      return reply.send({ realVisits24h, realDevices, realTrees });
+      return reply.send({
+        realVisits24h: countTrackedVisits24h(),
+        realDevices: countTrackedDevices(),
+        realTrees: getTrackedTreesPlanted(),
+      });
     },
   );
 
@@ -431,35 +373,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const range  = request.query.range  ?? '24h';
       const filter = request.query.filter ?? 'all';
-      const db     = getDb();
-      const realOnly = filter === 'real' ? 'AND user_agent IS NOT NULL' : '';
-      let rows: ChartRow[];
-      let granularity: 'hour' | 'day';
-
-      if (range === '24h') {
-        granularity = 'hour';
-        rows = db.prepare(`
-          SELECT strftime('%Y-%m-%dT%H:00:00.000Z', visited_at) AS label,
-                 COUNT(*) AS count
-          FROM visits
-          WHERE visited_at >= datetime('now', '-24 hours') ${realOnly}
-          GROUP BY strftime('%Y-%m-%dT%H', visited_at)
-          ORDER BY label ASC
-        `).all() as ChartRow[];
-      } else {
-        granularity = 'day';
-        const days = range === '7d' ? 7 : 30;
-        const since = new Date();
-        since.setDate(since.getDate() - days + 1);
-        const sinceStr = since.toISOString().slice(0, 10);
-        rows = db.prepare(`
-          SELECT date(visited_at) AS label, COUNT(*) AS count
-          FROM visits
-          WHERE date(visited_at) >= ? ${realOnly}
-          GROUP BY date(visited_at)
-          ORDER BY label ASC
-        `).all(sinceStr) as ChartRow[];
-      }
+      const { rows, granularity } = listChartRows(range, filter);
 
       const total = rows.reduce((s, r) => s + r.count, 0);
       return reply.send({ data: rows, total, granularity });

@@ -14,7 +14,7 @@ import { customersRoutes } from './routes/customers';
 import { configRoutes } from './routes/config';
 
 export async function buildServer() {
-  const fastify = Fastify({ logger: true });
+  const fastify = Fastify({ logger: config.nodeEnv !== 'test' });
 
   fastify.addHook('onSend', (_request, reply, _payload, done) => {
     reply.header('X-Content-Type-Options', 'nosniff');
