@@ -20,16 +20,6 @@
           </span>
         </Transition>
         <button
-          v-if="isDev"
-          @click="handleReset"
-          :disabled="resetting"
-          class="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all duration-200
-                 bg-gray-100 border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-400 disabled:opacity-40"
-          title="Reset demo data"
-        >
-          <span>↺</span> Reset
-        </button>
-        <button
           @click="toggleAuto"
           class="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all duration-200"
           :class="autoMode
@@ -151,6 +141,29 @@
         </span>
       </div>
     </Transition>
+
+    <!-- Development-only destructive action -->
+    <div
+      v-if="isDev"
+      class="mt-4 rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+    >
+      <div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Development reset</p>
+        <p class="text-xs text-red-700 font-semibold">Reset all stored visits and customers</p>
+        <p class="text-[10px] text-red-400 mt-0.5">
+          Clears the database and reloads the seeded demo dataset. Hidden in production.
+        </p>
+      </div>
+      <button
+        @click="handleReset"
+        :disabled="resetting"
+        class="shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-full border transition-all duration-200
+               bg-white border-red-200 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+        title="Reset all visits and customers"
+      >
+        <span>↺</span> {{ resetting ? 'Resetting...' : 'Reset all data' }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -278,8 +291,18 @@ async function sendVisit(deviceId: string) {
 
 async function handleReset() {
   if (resetting.value) return;
+  const confirmed = window.confirm(
+    'This will delete all current visits and customers, then reload the seeded demo data. Continue?',
+  );
+  if (!confirmed) return;
+
   resetting.value = true;
   try {
+    if (autoInterval) {
+      clearInterval(autoInterval);
+      autoInterval = null;
+      autoMode.value = false;
+    }
     await apiFetch('/api/v1/reset', { method: 'POST' });
     sessionTrees.value = 0;
     lastResult.value = null;
