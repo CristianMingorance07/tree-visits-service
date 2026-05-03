@@ -1,5 +1,7 @@
 # Tree-Nation — Visit Tracker
 
+![CI](https://github.com/CristianMingorance07/tree-visits-service/actions/workflows/ci.yml/badge.svg?branch=main)
+
 Every N visits from a customer device plants a tree. This service tracks those visits, counts the milestones, and shows everything in a real-time dashboard. Built as a technical assessment for Tree-Nation's migration to Vue 3 + TypeScript.
 
 **Live demo →** https://tree-visits-service-production.up.railway.app
