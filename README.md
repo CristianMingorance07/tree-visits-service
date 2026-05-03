@@ -1,10 +1,32 @@
 # Tree-Nation — Visit Tracker
 
-![CI](https://github.com/CristianMingorance07/tree-visits-service/actions/workflows/ci.yml/badge.svg?branch=main)
+[![CI](https://github.com/CristianMingorance07/tree-visits-service/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CristianMingorance07/tree-visits-service/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-20_LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x_strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org)
+[![Fastify](https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white)](https://fastify.dev)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](./docker-compose.yml)
+[![Railway](https://img.shields.io/badge/Railway-deployed-7B2FBE?logo=railway&logoColor=white)](https://tree-visits-service-production.up.railway.app)
 
 Every N visits from a customer device plants a tree. This service tracks those visits, counts the milestones, and shows everything in a real-time dashboard. Built as a technical assessment for Tree-Nation's migration to Vue 3 + TypeScript.
 
-**Live demo →** https://tree-visits-service-production.up.railway.app
+**[→ Live demo](https://tree-visits-service-production.up.railway.app)**
+
+---
+
+## Table of contents
+
+- [Reviewer access](#reviewer-access)
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Running it locally](#running-it-locally)
+- [Tests](#tests)
+- [API reference](#api-reference)
+- [Environment variables](#environment-variables)
+- [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [Design decisions](#design-decisions)
 
 ---
 
@@ -14,8 +36,10 @@ Every N visits from a customer device plants a tree. This service tracks those v
 
 | | |
 |---|---|
+| **Live dashboard** | https://tree-visits-service-production.up.railway.app |
 | **Admin secret (production)** | `tree-nation-admin-2026` |
 | **Admin secret (local Docker)** | `local-dev-admin-secret` |
+| **Swagger UI (local dev only)** | http://localhost:3000/docs |
 
 The admin secret unlocks the **Reset data** button on the dashboard (wipes all visits and reloads the demo seed) and the `PATCH /api/v1/config` endpoint for changing the threshold at runtime.
 
@@ -27,9 +51,9 @@ A physical store device (POS terminal, kiosk, tablet) sends a `POST` to the API 
 
 The dashboard has two tabs:
 
-**Demo** shows a set of simulated store devices. You can fire visits individually or in a burst using the built-in EventSimulator, watch the chart update, and see which devices are closest to their next tree. The demo data is seeded fresh on startup and can be reset from the UI.
+**Demo** — a set of simulated store devices with a built-in EventSimulator. Fire visits individually or in bursts, watch the chart update, and see which devices are closest to their next tree. Demo data is seeded on startup and can be reset from the UI without touching live data.
 
-**Live** shows real visits coming in through the public tracking link — the same URL that appears on the QR code in the Track page. Each visit is enriched asynchronously with geo data (country, city) and browser/OS information. The enrichment happens after the response is sent, so it never adds latency to the tracked page load.
+**Live** — real visits coming in through the public tracking link, the same URL shown as a QR code in the Track page. Each visit is enriched asynchronously with geo data (country, city) and browser/OS fingerprint. The enrichment happens after the response is sent, so it never adds latency to the tracked page load.
 
 ---
 
@@ -46,7 +70,7 @@ Browser / Device
            ▼
 ┌──────────────────────────────────────────┐
 │  Fastify 5 · Node 20 · TypeScript strict │
-│  Schema validation on every route        │
+│  JSON Schema validation on every route   │
 │  Per-route rate limits (writes only)     │
 │  Anti-bot layer on tracking endpoint     │
 │  Security headers on every response      │
@@ -59,58 +83,65 @@ Browser / Device
 │   SQLite (WAL mode) │  customers · visits · app_config
 │   better-sqlite3    │  Auto-created on first start
 └─────────────────────┘
-           │ setImmediate (non-blocking)
+           │ setImmediate — non-blocking
            ▼
 ┌─────────────────────┐
-│   ip-api.com        │  Geo lookup — never blocks the visit response
+│   ip-api.com        │  Geo lookup · never blocks the visit response
 └─────────────────────┘
 ```
 
-The dashboard itself polls six endpoints every 10 seconds. WebSockets would feel snappier but would add server-side connection state, sticky-session requirements, and proxy configuration. For a dashboard where the meaningful metric is visits-per-hour, 10-second polling is indistinguishable from real-time and significantly simpler to operate.
+The dashboard polls six endpoints every 10 seconds. WebSockets would feel snappier but would add server-side connection state, sticky-session requirements, and proxy configuration overhead. For a dashboard where the meaningful metric is visits-per-hour, 10-second polling is indistinguishable from real-time and significantly simpler to operate.
 
 ---
 
 ## Tech stack
 
-| | |
+| Layer | Technology |
 |---|---|
-| **API** | Fastify 5 + TypeScript strict |
-| **Database** | SQLite via better-sqlite3 (WAL mode) |
-| **Runtime** | Node.js 20 LTS |
-| **Tests** | Vitest 3 · SQLite `:memory:` |
-| **Frontend** | Vue 3 Composition API · Vite · Tailwind CSS 3 |
-| **Charts** | Chart.js 4 |
+| **API framework** | [Fastify 5](https://fastify.dev) + TypeScript strict |
+| **Runtime** | [Node.js 20 LTS](https://nodejs.org) |
+| **Database** | [SQLite](https://sqlite.org) via [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (WAL mode) |
+| **Frontend** | [Vue 3](https://vuejs.org) Composition API · [Vite](https://vite.dev) · [Tailwind CSS 3](https://tailwindcss.com) |
+| **Charts** | [Chart.js 4](https://www.chartjs.org) |
+| **Tests** | [Vitest 3](https://vitest.dev) · SQLite `:memory:` |
 | **Containers** | Docker multi-stage · nginx:alpine |
-| **Hosting** | Railway |
+| **CI** | [GitHub Actions](./.github/workflows/ci.yml) |
+| **Hosting** | [Railway](https://railway.app) |
 
 ---
 
 ## Running it locally
 
-### Docker — zero setup
+### Option A — Docker (recommended, zero setup)
 
 ```bash
 docker compose up --build
 ```
 
-Dashboard → http://localhost  
-API → http://localhost:3000 (also exposed directly for testing)
+| | URL |
+|---|---|
+| Dashboard | http://localhost |
+| API | http://localhost:3000 |
 
-The compose file maps port 80 for the frontend and 3000 for the backend. If port 80 is taken, edit the `ports` entry in `docker-compose.yml` to something like `"8080:80"`.
+The compose file uses `local-dev-admin-secret` as the default `ADMIN_SECRET`. If port 80 is already in use, change `"80:80"` to `"8080:80"` in `docker-compose.yml`.
 
-### Local dev (hot reload)
+### Option B — Local dev (hot reload)
 
-You'll need Node 20 — `better-sqlite3` ships prebuilt binaries only for that ABI. If you're on a different version: `nvm install 20 && nvm use 20`.
+`better-sqlite3` ships prebuilt binaries only for Node 20. Make sure you're on the right version:
+
+```bash
+nvm install 20 && nvm use 20
+```
 
 **Backend:**
 ```bash
 cd backend
 cp .env.example .env
 npm install
-npm run dev        # tsx watch, restarts on save
+npm run dev        # tsx watch — restarts on save
 ```
 
-**Frontend** (separate terminal):
+**Frontend** (new terminal):
 ```bash
 cd frontend
 cp .env.example .env
@@ -118,7 +149,9 @@ npm install
 npm run dev        # Vite at localhost:5173, proxies /api/* to :3000
 ```
 
-No CORS configuration needed in dev — Vite's proxy handles it.
+No CORS configuration needed — Vite's dev proxy handles it.
+
+> Swagger UI is available at **http://localhost:3000/docs** in development mode. It's generated directly from the same JSON Schema objects used for request validation, so it always reflects the actual API.
 
 ---
 
@@ -128,44 +161,42 @@ No CORS configuration needed in dev — Vite's proxy handles it.
 cd backend && npm test
 ```
 
-84 tests across 5 suites, runs in under 2 seconds:
+84 tests across 5 suites. Each suite gets a fresh in-memory SQLite database — no shared state, no cleanup, no external dependencies. Total runtime under 2 seconds.
 
-| Suite | What it covers |
+| Suite | Coverage |
 |---|---|
-| `visitService.test.ts` | First visit, counter accumulation, milestone detection, tree increment, post-milestone reset, config changes |
-| `customerValidation.test.ts` | ID format validation, honeypot detection, bot user-agent patterns |
-| `antiBotTrack.test.ts` | Full tracking endpoint integration — legitimate visits, honeypot IDs, bot UAs, rapid-fire rate limiting |
-| `visitsRoutes.test.ts` | Public tracking endpoint happy path |
-| `adminRoutes.test.ts` | Config updates and reset — with and without the admin secret |
-
-Each test spins up a fresh in-memory SQLite database. No shared state, no cleanup required, no external dependencies.
+| [`visitService.test.ts`](./backend/tests/visitService.test.ts) | First visit · counter accumulation · milestone detection · tree increment · post-milestone reset · config changes |
+| [`customerValidation.test.ts`](./backend/tests/customerValidation.test.ts) | ID format validation · honeypot keyword detection · bot user-agent matching |
+| [`antiBotTrack.test.ts`](./backend/tests/antiBotTrack.test.ts) | Full tracking endpoint — legitimate visits, honeypot IDs, bot UAs, rapid-fire sliding window |
+| [`visitsRoutes.test.ts`](./backend/tests/visitsRoutes.test.ts) | Public tracking endpoint happy path |
+| [`adminRoutes.test.ts`](./backend/tests/adminRoutes.test.ts) | Config updates and reset — with/without/wrong admin secret |
 
 ---
 
 ## API reference
 
-All endpoints are relative to the API base. In Docker or production, the frontend proxies `/api/*` through nginx — you can also hit the backend directly on port 3000.
+All endpoints are under `/api/v1`. In Docker and production the frontend proxies `/api/*` through nginx — you can also call the backend directly on port 3000.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/api/v1/visits` | — | Record a device visit |
 | `GET` | `/api/v1/visits/track/:customerId` | — | Record a visit via tracking link (browser / QR code) |
 | `GET` | `/api/v1/visits/recent` | — | Recent visits — `?filter=real` or `?filter=demo` |
-| `GET` | `/api/v1/visits/chart` | — | Chart data — `?range=24h\|7d\|30d` and `?filter=all\|real` |
-| `GET` | `/api/v1/customers` | — | All customers, ranked by trees then progress |
+| `GET` | `/api/v1/visits/chart` | — | Chart data — `?range=24h\|7d\|30d` · `?filter=all\|real` |
+| `GET` | `/api/v1/customers` | — | All customers, ranked by trees then visit progress |
 | `GET` | `/api/v1/customers/:id` | — | Single customer stats |
 | `GET` | `/api/v1/stats` | — | Aggregate totals across all visits |
 | `GET` | `/api/v1/stats/live` | — | Totals for tracking-link visits only |
-| `GET` | `/api/v1/config` | — | Current threshold |
-| `PATCH` | `/api/v1/config` | `x-admin-secret` | Update threshold — takes effect immediately |
+| `GET` | `/api/v1/config` | — | Current threshold (`visits_per_tree`) |
+| `PATCH` | `/api/v1/config` | `x-admin-secret` | Update threshold — takes effect immediately, no restart needed |
 | `POST` | `/api/v1/reset` | `x-admin-secret` | Wipe all visits and reload the demo seed |
-| `GET` | `/health` | — | Health check (no DB dependency) |
+| `GET` | `/health` | — | Health check — no DB dependency |
 
-The tracking endpoint (`/track/:customerId`) has a four-layer anti-bot filter: ID format validation, honeypot keyword detection, known bot user-agent matching, and a sliding-window rapid-fire limiter (3 hits per 30 seconds per IP + customer ID pair). Filtered requests are silently swallowed — no error is returned that would reveal the filter exists.
+The tracking endpoint has a four-layer anti-bot filter: ID format validation → honeypot keyword detection → known bot UA matching → sliding-window rapid-fire limiter (3 hits / 30 s / IP+customer pair). Filtered requests are silently swallowed with a 200 or 201 — no error is returned that would reveal the filter exists.
 
 ### Examples
 
-**Record a device visit:**
+**Record a device visit**
 ```bash
 curl -X POST http://localhost:3000/api/v1/visits \
   -H "Content-Type: application/json" \
@@ -181,16 +212,16 @@ curl -X POST http://localhost:3000/api/v1/visits \
 }
 ```
 
-**Update the threshold at runtime:**
+**Update the threshold at runtime**
 ```bash
 curl -X PATCH http://localhost:3000/api/v1/config \
   -H "Content-Type: application/json" \
   -H "x-admin-secret: local-dev-admin-secret" \
   -d '{"visitsPerTree": 5}'
 ```
-Takes effect on the very next visit. The previous threshold is not applied retroactively.
+Takes effect on the very next visit. Past earned trees are not recalculated.
 
-**Reset all data and reload the demo seed:**
+**Reset all data and reload the demo seed**
 ```bash
 curl -X POST http://localhost:3000/api/v1/reset \
   -H "Content-Type: application/json" \
@@ -201,22 +232,22 @@ curl -X POST http://localhost:3000/api/v1/reset \
 
 ## Environment variables
 
-### Backend
+### Backend (`backend/.env`)
 
 | Variable | Default | Notes |
 |---|---|---|
 | `PORT` | `3000` | |
-| `NODE_ENV` | `development` | Swagger UI is only served outside of `production` |
+| `NODE_ENV` | `development` | Swagger UI is disabled when set to `production` |
 | `VISITS_PER_TREE` | `10` | Seeds the initial threshold on first start |
 | `DB_PATH` | `./data/visits.db` | Directory is created automatically |
-| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:8080` | Comma-separated |
-| `ADMIN_SECRET` | `local-dev-admin-secret` (Docker) / _(empty)_ (bare dev) | Required in production — server won't start without it |
+| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:8080` | Comma-separated list of allowed origins |
+| `ADMIN_SECRET` | `local-dev-admin-secret` (Docker) / _(empty)_ (bare dev) | **Required in production** — server won't start without it |
 
-### Frontend
+### Frontend (`frontend/.env`)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `VITE_API_URL` | _(empty)_ | Leave empty when nginx proxies `/api/*`. Set to the full backend URL for standalone frontend deployments |
+| `VITE_API_URL` | _(empty)_ | Leave empty when nginx proxies `/api/*`. Set to the full backend URL for standalone deployments |
 
 ---
 
@@ -224,41 +255,77 @@ curl -X POST http://localhost:3000/api/v1/reset \
 
 ```
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # Type check + 84 tests on every push and PR
+│
 ├── backend/
 │   ├── src/
-│   │   ├── config/          # Single config object built from env vars
-│   │   ├── db/              # SQLite setup (WAL, migrations, seed data)
-│   │   ├── repositories/    # Data-access layer — SQL stays here, out of routes
-│   │   ├── routes/          # Fastify route handlers (visits, customers, config)
-│   │   ├── services/        # visitService — the atomic transaction logic
+│   │   ├── config/             # Single config object built from env vars
+│   │   ├── db/                 # SQLite setup — WAL mode, migrations, seed data
+│   │   ├── repositories/       # Data-access layer — SQL stays here, out of routes
+│   │   ├── routes/             # Fastify route handlers (visits, customers, config)
+│   │   ├── services/           # visitService — the atomic transaction logic
 │   │   └── utils/
-│   │       ├── customerValidation.ts  # ID format, honeypot, bot UA checks
-│   │       ├── rapidFire.ts           # Sliding-window rate limiter
-│   │       ├── geo.ts                 # ip-api.com lookup + language parsing
+│   │       ├── customerValidation.ts   # ID format, honeypot, bot UA checks
+│   │       ├── rapidFire.ts            # Sliding-window rate limiter
+│   │       ├── geo.ts                  # ip-api.com lookup + language parsing
 │   │       └── date.ts
-│   └── tests/               # Vitest suites — SQLite :memory: per test file
+│   ├── tests/                  # Vitest suites — fresh SQLite :memory: per file
+│   └── .env.example
 │
 ├── frontend/
-│   └── src/
-│       ├── components/      # StatsCard, VisitsChart, CustomerLeaderboard,
-│       │                    # EventSimulator, LiveDashboard, GrowingTree,
-│       │                    # LiveIndicator, ConfirmModal, SkeletonCard
-│       ├── composables/     # useVisitsData — polling, reactive state, cleanup
-│       ├── lib/             # apiFetch — typed wrapper, error normalisation
-│       ├── types/           # API response interfaces shared across components
-│       └── views/           # Dashboard.vue (Demo + Live tabs) · TrackView.vue
+│   ├── src/
+│   │   ├── components/         # StatsCard, VisitsChart, CustomerLeaderboard,
+│   │   │                       # EventSimulator, LiveDashboard, GrowingTree,
+│   │   │                       # LiveIndicator, ConfirmModal, SkeletonCard
+│   │   ├── composables/        # useVisitsData — polling, reactive state, cleanup
+│   │   ├── lib/                # apiFetch — typed wrapper + error normalisation
+│   │   ├── types/              # API response interfaces shared across components
+│   │   └── views/              # Dashboard.vue (Demo + Live tabs) · TrackView.vue
+│   └── .env.example
 │
-├── frontend/public/         # Static assets
 ├── docker-compose.yml
-├── DECISIONS.md             # Why each non-obvious choice was made
+├── DECISIONS.md                # Why each non-obvious choice was made
 └── README.md
 ```
 
 ---
 
+## Contributing
+
+The project follows a simple branching strategy:
+
+```
+main          ← production (Railway auto-deploys on merge)
+  └── develop ← integration branch
+        └── feat/* · fix/* · chore/*  ← short-lived feature branches
+```
+
+**Workflow:**
+
+```bash
+# 1. Branch off develop
+git checkout develop && git pull origin develop
+git checkout -b feat/your-feature
+
+# 2. Work, commit, push
+git push origin feat/your-feature
+
+# 3. Open a PR → develop on GitHub
+# CI runs automatically (type check + 84 tests)
+
+# 4. After review, merge to develop
+# When ready to ship → PR from develop → main → Railway deploys
+```
+
+CI runs on every push to `main` and `develop` and on every pull request targeting either branch. A PR cannot be merged if CI fails.
+
+---
+
 ## Design decisions
 
-The reasoning behind the main technical choices — SQLite over Postgres, atomic transactions, polling over WebSockets, the anti-bot strategy, the dependency upgrade approach, and what would change at 10M+ visits/day — is documented in [`DECISIONS.md`](./DECISIONS.md).
+The reasoning behind the main technical choices — SQLite over Postgres, why atomic transactions matter for milestone counting, polling over WebSockets, the anti-bot strategy, rate limiting scope, the dependency upgrade approach, and what the architecture would look like at 10M+ visits/day — is all in [`DECISIONS.md`](./DECISIONS.md).
 
 ---
 
