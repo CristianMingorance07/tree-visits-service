@@ -1,9 +1,35 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# Database
 *.db
 *.db-shm
 *.db-wal
+data/
+
+# Environment variables
 .env
 .env.local
 *.local
-data/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Test coverage
+coverage/
+*.lcov
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
