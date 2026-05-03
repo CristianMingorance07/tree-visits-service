@@ -9,6 +9,8 @@ interface ConfigRow { value: string; }
 interface PostVisitBody { customerId: string; }
 interface HourlyRow { hour: string; count: number; }
 interface StatsRow { totalTreesPlanted: number; totalCustomers: number; totalVisits: number; }
+interface ChartQuerystring { range?: string; filter?: string; }
+interface ChartRow { label: string; count: number; }
 interface RecentRow {
   id: number;
   customer_id: string;
@@ -328,6 +330,78 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       const realTrees = perDevice.reduce((sum, r) => sum + Math.floor(r.cnt / visitsPerTree), 0);
 
       return reply.send({ realVisits24h, realDevices, realTrees });
+    },
+  );
+
+  fastify.get<{ Querystring: ChartQuerystring }>(
+    '/api/v1/visits/chart',
+    {
+      schema: {
+        tags: ['Visits'],
+        summary: 'Visit activity for charting — configurable range (24h/7d/30d) and filter (all/real)',
+        querystring: {
+          type: 'object',
+          properties: {
+            range:  { type: 'string', enum: ['24h', '7d', '30d'] },
+            filter: { type: 'string', enum: ['all', 'real'] },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string' },
+                    count: { type: 'number' },
+                  },
+                },
+              },
+              total:       { type: 'number' },
+              granularity: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const range  = request.query.range  ?? '24h';
+      const filter = request.query.filter ?? 'all';
+      const db     = getDb();
+      const realOnly = filter === 'real' ? 'AND user_agent IS NOT NULL' : '';
+      let rows: ChartRow[];
+      let granularity: 'hour' | 'day';
+
+      if (range === '24h') {
+        granularity = 'hour';
+        rows = db.prepare(`
+          SELECT strftime('%Y-%m-%dT%H:00:00.000Z', visited_at) AS label,
+                 COUNT(*) AS count
+          FROM visits
+          WHERE visited_at >= datetime('now', '-24 hours') ${realOnly}
+          GROUP BY strftime('%Y-%m-%dT%H', visited_at)
+          ORDER BY label ASC
+        `).all() as ChartRow[];
+      } else {
+        granularity = 'day';
+        const days = range === '7d' ? 7 : 30;
+        const since = new Date();
+        since.setDate(since.getDate() - days + 1);
+        const sinceStr = since.toISOString().slice(0, 10);
+        rows = db.prepare(`
+          SELECT date(visited_at) AS label, COUNT(*) AS count
+          FROM visits
+          WHERE date(visited_at) >= ? ${realOnly}
+          GROUP BY date(visited_at)
+          ORDER BY label ASC
+        `).all(sinceStr) as ChartRow[];
+      }
+
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      return reply.send({ data: rows, total, granularity });
     },
   );
 }

@@ -76,7 +76,7 @@
 
         <!-- Hard error -->
         <div
-          v-else-if="error && !chartData.length"
+          v-else-if="error && !totalVisits"
           key="error"
           class="card p-12 text-center"
         >
@@ -117,13 +117,7 @@
               </div>
 
               <div class="card-accent p-6">
-                <div class="flex items-center justify-between mb-5">
-                  <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">
-                    Visit activity
-                  </h2>
-                  <span class="text-gray-300 text-[10px] font-mono">Last 24 hours · hourly</span>
-                </div>
-                <VisitsChart :data="chartData" />
+                <VisitsChart filter="all" :last-updated="lastUpdated" />
               </div>
 
               <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
@@ -157,6 +151,10 @@
                   subtitle="planted via real visits"
                   icon="🌳"
                 />
+              </div>
+
+              <div class="card-accent p-6">
+                <VisitsChart filter="real" :last-updated="lastUpdated" />
               </div>
 
               <LiveDashboard
@@ -205,7 +203,6 @@ const liveCustomers = computed(() =>
 );
 
 const {
-  chartData,
   totalVisits24h,
   totalTreesPlanted,
   totalCustomers,

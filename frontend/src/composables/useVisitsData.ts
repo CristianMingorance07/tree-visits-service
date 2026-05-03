@@ -11,7 +11,7 @@ import type {
   RecentScansResponse,
 } from '../types/api';
 
-export type { HourlyDataPoint, CustomerListItem, RecentScan };
+export type { CustomerListItem, RecentScan };
 export const POLL_INTERVAL_MS = 10_000;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'error';
@@ -87,7 +87,6 @@ export function useVisitsData() {
   });
 
   return {
-    chartData,
     totalVisits24h,
     totalTreesPlanted,
     totalCustomers,
