@@ -47,6 +47,32 @@
         </div>
       </div>
 
+      <!-- Local-only destructive action -->
+      <div
+        v-if="canShowLocalReset"
+        class="mb-8 rounded-2xl border border-red-100 bg-red-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+      >
+        <div>
+          <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Local reset</p>
+          <p class="text-xs text-red-700 font-semibold">Resets both Demo and Live panels</p>
+          <p class="text-[10px] text-red-400 mt-0.5">
+            Deletes all demo/live visits and customers, then reloads the seeded demo dataset.
+          </p>
+          <p v-if="resetStatus" class="text-[10px] font-semibold mt-1" :class="resetError ? 'text-red-600' : 'text-[#3aaa68]'">
+            {{ resetStatus }}
+          </p>
+        </div>
+        <button
+          @click="openResetModal"
+          :disabled="resetting"
+          class="shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-full border transition-all duration-200
+                 bg-white border-red-200 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+          title="Reset demo and live visits/customers"
+        >
+          <span>↺</span> {{ resetting ? 'Resetting...' : 'Reset all data' }}
+        </button>
+      </div>
+
       <!-- Loading skeleton -->
       <Transition name="dashboard" mode="out-in">
         <div v-if="isLoading" key="loading">
@@ -107,7 +133,7 @@
                 <VisitsChart filter="all" :last-updated="lastUpdated" @stats-update="onDemoStats" />
               </div>
 
-              <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
+              <EventSimulator :key="simulatorKey" :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
 
               <LiveDashboard
                 mode="demo"
@@ -172,12 +198,78 @@
         <span class="text-gray-300 text-[10px] font-mono">Auto-refresh every {{ POLL_INTERVAL_MS / 1000 }}s</span>
       </footer>
     </div>
+
+    <ConfirmModal
+      v-model="showResetModal"
+      variant="danger"
+      title="Reset Demo and Live data?"
+      description="This clears every stored visit and customer from both dashboard panels, then reloads the seeded demo dataset so you can test from a clean state."
+      :busy="resetting"
+      @close="closeResetModal"
+    >
+      <template #icon>↺</template>
+      <template #label>Destructive local action</template>
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div class="rounded-2xl border border-red-100 bg-red-50/60 px-3 py-3">
+            <p class="text-[9px] font-black uppercase tracking-widest text-red-300 mb-1">Deletes</p>
+            <p class="text-xs font-bold text-red-700">Demo visits</p>
+          </div>
+          <div class="rounded-2xl border border-red-100 bg-red-50/60 px-3 py-3">
+            <p class="text-[9px] font-black uppercase tracking-widest text-red-300 mb-1">Deletes</p>
+            <p class="text-xs font-bold text-red-700">Live visits</p>
+          </div>
+          <div class="rounded-2xl border border-[#65D693]/25 bg-[#65D693]/10 px-3 py-3">
+            <p class="text-[9px] font-black uppercase tracking-widest text-[#3aaa68]/50 mb-1">Reloads</p>
+            <p class="text-xs font-bold text-[#3aaa68]">Demo seed</p>
+          </div>
+        </div>
+
+        <label class="block">
+          <span class="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Admin secret</span>
+          <input
+            v-model="adminSecret"
+            type="password"
+            autocomplete="off"
+            placeholder="local-dev-admin-secret"
+            :disabled="resetting"
+            class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-mono text-gray-700 outline-none transition-all
+                   focus:border-red-200 focus:bg-white focus:ring-4 focus:ring-red-100 disabled:opacity-50"
+          />
+        </label>
+
+        <p v-if="modalError" class="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">
+          {{ modalError }}
+        </p>
+      </div>
+
+      <template #actions>
+        <button
+          type="button"
+          class="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-2xl text-sm font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-40 active:scale-[0.98]"
+          :disabled="resetting"
+          @click="closeResetModal"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-2xl text-sm font-black bg-red-500 text-white shadow-lg shadow-red-500/25 hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="resetting || !adminSecret.trim()"
+          @click="confirmReset"
+        >
+          {{ resetting ? 'Resetting…' : 'Yes, reset everything' }}
+        </button>
+      </template>
+    </ConfirmModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useVisitsData, POLL_INTERVAL_MS } from '../composables/useVisitsData';
+import { apiFetch } from '../lib/api';
 import StatsCard from '../components/StatsCard.vue';
 import VisitsChart from '../components/VisitsChart.vue';
 import CustomerLeaderboard from '../components/CustomerLeaderboard.vue';
@@ -185,8 +277,18 @@ import EventSimulator from '../components/EventSimulator.vue';
 import LiveDashboard from '../components/LiveDashboard.vue';
 import LiveIndicator from '../components/LiveIndicator.vue';
 import SkeletonCard from '../components/SkeletonCard.vue';
+import ConfirmModal from '../components/ConfirmModal.vue';
 
 const activeTab = ref<'demo' | 'live'>('demo');
+const resetting = ref(false);
+const resetStatus = ref('');
+const resetError = ref(false);
+const showResetModal = ref(false);
+const modalError = ref('');
+const adminSecret = ref(window.localStorage.getItem('treeVisitsAdminSecret') ?? '');
+const simulatorKey = ref(0);
+
+const canShowLocalReset = import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 const demoChartTotal = ref(0);
 const demoChartLabel = ref('Last 24 hours');
@@ -200,6 +302,50 @@ function onDemoStats(total: number, label: string) {
 function onLiveStats(total: number, label: string) {
   liveChartTotal.value = total;
   liveChartLabel.value = label;
+}
+
+function openResetModal() {
+  resetStatus.value = '';
+  resetError.value = false;
+  modalError.value = '';
+  showResetModal.value = true;
+}
+
+function closeResetModal() {
+  if (resetting.value) return;
+  showResetModal.value = false;
+  modalError.value = '';
+}
+
+async function confirmReset() {
+  const secret = adminSecret.value.trim();
+  if (!secret || resetting.value) return;
+  window.localStorage.setItem('treeVisitsAdminSecret', secret);
+
+  resetting.value = true;
+  resetStatus.value = '';
+  resetError.value = false;
+  modalError.value = '';
+  try {
+    await apiFetch('/api/v1/reset', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-secret': secret,
+      },
+      body: '{}',
+    });
+    await refresh();
+    simulatorKey.value++;
+    showResetModal.value = false;
+    resetStatus.value = 'Data reset complete. Demo seed reloaded.';
+  } catch (err) {
+    resetError.value = true;
+    modalError.value = err instanceof Error ? err.message : 'Reset failed';
+    resetStatus.value = modalError.value;
+  } finally {
+    resetting.value = false;
+  }
 }
 
 const demoCustomers = computed(() =>
@@ -245,5 +391,23 @@ const {
 .tab-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-active form,
+.modal-leave-active form {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from form,
+.modal-leave-to form {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
 }
 </style>
