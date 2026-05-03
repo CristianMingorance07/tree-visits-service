@@ -60,34 +60,57 @@ The dashboard has two tabs:
 ## Architecture
 
 ```
-Browser / Device
-      │
-      ▼ :80
-┌─────────────────────┐
-│   nginx (Alpine)    │  Serves the Vue SPA · proxies /api/* → backend
-└──────────┬──────────┘
-           │ http://backend:3000
-           ▼
-┌──────────────────────────────────────────┐
-│  Fastify 5 · Node 20 · TypeScript strict │
-│  JSON Schema validation on every route   │
-│  Per-route rate limits (writes only)     │
-│  Anti-bot layer on tracking endpoint     │
-│  Security headers on every response      │
-│  Swagger UI at /docs (dev only)          │
-│  Graceful SIGTERM shutdown               │
-└──────────┬───────────────────────────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   SQLite (WAL mode) │  customers · visits · app_config
-│   better-sqlite3    │  Auto-created on first start
-└─────────────────────┘
-           │ setImmediate — non-blocking
-           ▼
-┌─────────────────────┐
-│   ip-api.com        │  Geo lookup · never blocks the visit response
-└─────────────────────┘
+  ╔═══════════════════════════════════════════════════════════════════╗
+  ║                        INCOMING TRAFFIC                          ║
+  ╠════════════════════════╦══════════════════════════════════════════╣
+  ║  📱 Store device / POS ║  🌐 Browser · QR code scan              ║
+  ║  POST /api/v1/visits   ║  GET /api/v1/visits/track/:customerId   ║
+  ║  (programmatic)        ║  (public link — no auth required)       ║
+  ╚═══════════╤════════════╩═══════════════╤══════════════════════════╝
+              │                            │
+              │   ┌─── LOCAL ONLY ───────┐ │
+              │   │  nginx :80 · Alpine  │ │
+              │   │  SPA + /api/* proxy  │ │
+              │   └──────────┬───────────┘ │
+              └──────────────▼─────────────┘
+                             │
+  ╔══════════════════════════▼════════════════════════════════════════╗
+  ║             FASTIFY 5 · NODE 20 · TYPESCRIPT STRICT              ║
+  ╠═══════════════════════════════════════════════════════════════════╣
+  ║  ┌─────────────────────────────────────────────────────────────┐ ║
+  ║  │                    Anti-bot pipeline                        │ ║
+  ║  │  1 · ID format check  →  2 · Honeypot keywords             │ ║
+  ║  │  3 · Known bot UA     →  4 · Rapid-fire sliding window     │ ║
+  ║  └─────────────────────────────────────────────────────────────┘ ║
+  ║                                                                   ║
+  ║  JSON Schema validation on every route                            ║
+  ║  Per-route rate limits (writes only) · Security headers           ║
+  ║  Swagger UI at /docs (dev only) · Graceful SIGTERM shutdown       ║
+  ╚═══════════════════════════╤═══════════════════════════════════════╝
+                              │  db.transaction() — atomic milestone check
+                              ▼
+  ╔═══════════════════════════════════════════════════════════════════╗
+  ║              SQLite · WAL mode · better-sqlite3                  ║
+  ╠══════════════════╦═════════════════════╦═════════════════════════╣
+  ║    customers     ║       visits        ║      app_config         ║
+  ║  id              ║  id · customer_id   ║  visits_per_tree        ║
+  ║  total_visits    ║  visited_at         ║  (hot-reload via PATCH) ║
+  ║  trees_planted   ║  user_agent · ip    ║                         ║
+  ║  last_seen       ║  country · city     ║                         ║
+  ╚══════════════════╩══════════╤══════════╩═════════════════════════╝
+                                │  setImmediate — after response is sent
+                                ▼
+               ┌────────────────────────────┐
+               │        ip-api.com          │
+               │  Async geo enrichment      │
+               │  country · city · language │
+               │  Skipped for private IPs   │
+               └────────────────────────────┘
+
+  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+  📊  Vue 3 dashboard polls 6 endpoints in parallel every 10 s
+      No WebSocket state · works through any proxy · auto-cleanup
+  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 ```
 
 The dashboard polls six endpoints every 10 seconds. WebSockets would feel snappier but would add server-side connection state, sticky-session requirements, and proxy configuration overhead. For a dashboard where the meaningful metric is visits-per-hour, 10-second polling is indistinguishable from real-time and significantly simpler to operate.
