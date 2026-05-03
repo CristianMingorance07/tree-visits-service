@@ -1,8 +1,8 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { apiFetch } from '../lib/api';
 import type {
-  HourlyResponse,
   StatsResponse,
+  LiveStatsResponse,
   ConfigResponse,
   CustomerListItem,
   CustomersListResponse,
@@ -15,22 +15,13 @@ export const POLL_INTERVAL_MS = 10_000;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'error';
 
-interface LiveStatsResponse {
-  realVisits24h: number;
-  realDevices: number;
-  realTrees: number;
-}
-
 export function useVisitsData() {
-  const totalVisits24h = ref(0);
   const totalTreesPlanted = ref(0);
   const totalCustomers = ref(0);
-  const totalVisits = ref(0);
   const visitsPerTree = ref(10);
   const customers = ref<CustomerListItem[]>([]);
   const recentVisits = ref<RecentTrackedVisit[]>([]);
   const demoVisits = ref<RecentTrackedVisit[]>([]);
-  const liveVisits24h = ref(0);
   const liveDevices = ref(0);
   const liveTrees = ref(0);
   const isLoading = ref(true);
@@ -43,8 +34,7 @@ export function useVisitsData() {
 
   async function fetchData() {
     try {
-      const [hourly, stats, config, customerList, recent, liveStats, demoFeed] = await Promise.all([
-        apiFetch<HourlyResponse>('/api/v1/visits/hourly'),
+      const [stats, config, customerList, recent, liveStats, demoFeed] = await Promise.all([
         apiFetch<StatsResponse>('/api/v1/stats'),
         apiFetch<ConfigResponse>('/api/v1/config'),
         apiFetch<CustomersListResponse>('/api/v1/customers'),
@@ -53,15 +43,12 @@ export function useVisitsData() {
         apiFetch<RecentVisitsResponse>('/api/v1/visits/recent?filter=demo'),
       ]);
 
-      totalVisits24h.value = hourly.totalVisits24h;
       totalTreesPlanted.value = stats.totalTreesPlanted;
       totalCustomers.value = stats.totalCustomers;
-      totalVisits.value = stats.totalVisits;
       visitsPerTree.value = config.visitsPerTree;
       customers.value = customerList.customers;
       recentVisits.value = recent.visits;
       demoVisits.value = demoFeed.visits;
-      liveVisits24h.value = liveStats.realVisits24h;
       liveDevices.value = liveStats.realDevices;
       liveTrees.value = liveStats.realTrees;
       error.value = null;
@@ -87,15 +74,12 @@ export function useVisitsData() {
   });
 
   return {
-    totalVisits24h,
     totalTreesPlanted,
     totalCustomers,
-    totalVisits,
     visitsPerTree,
     customers,
     recentVisits,
     demoVisits,
-    liveVisits24h,
     liveDevices,
     liveTrees,
     isLoading,

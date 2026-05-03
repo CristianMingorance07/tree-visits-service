@@ -1,37 +1,17 @@
-export interface HourlyDataPoint {
-  hour: string;
-  count: number;
-}
-
-export interface HourlyResponse {
-  data: HourlyDataPoint[];
-  totalVisits24h: number;
-}
-
 export interface StatsResponse {
   totalTreesPlanted: number;
   totalCustomers: number;
   totalVisits: number;
 }
 
+export interface LiveStatsResponse {
+  realVisits24h: number;
+  realDevices: number;
+  realTrees: number;
+}
+
 export interface ConfigResponse {
   visitsPerTree: number;
-}
-
-export interface CustomerResponse {
-  customerId: string;
-  totalVisits: number;
-  treesPlanted: number;
-  lastSeen: string;
-  visitsUntilNextTree: number;
-}
-
-export interface VisitResponse {
-  customerId: string;
-  totalVisits: number;
-  treesPlanted: number;
-  treeEarned: boolean;
-  lastSeen: string;
 }
 
 export interface CustomerListItem {
@@ -42,12 +22,33 @@ export interface CustomerListItem {
   visitsUntilNextTree: number;
 }
 
+/** @deprecated Use CustomerListItem */
+export type CustomerResponse = CustomerListItem;
+
 export interface CustomersListResponse {
   customers: CustomerListItem[];
 }
 
+export interface VisitResponse {
+  customerId: string;
+  totalVisits: number;
+  treesPlanted: number;
+  treeEarned: boolean;
+  lastSeen: string;
+}
+
+export interface TrackResult {
+  customerId: string;
+  totalVisits: number;
+  treesPlanted: number;
+  treeEarned: boolean;
+  lastSeen: string;
+  visitsUntilNextTree: number;
+  visitsPerTree: number;
+}
+
 export interface DeviceInfo {
-  type: string;   // 'mobile' | 'tablet' | 'desktop'
+  type: string;
   os: string;
   browser: string;
   brand: string | null;
@@ -66,14 +67,4 @@ export interface RecentTrackedVisit {
 
 export interface RecentVisitsResponse {
   visits: RecentTrackedVisit[];
-}
-
-export interface TrackResult {
-  customerId: string;
-  totalVisits: number;
-  treesPlanted: number;
-  treeEarned: boolean;
-  lastSeen: string;
-  visitsUntilNextTree: number;
-  visitsPerTree: number;
 }

@@ -40,10 +40,12 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Chart } from 'chart.js/auto';
 import type { ScriptableContext } from 'chart.js';
+import { apiFetch } from '../lib/api';
 
 type Range = '24h' | '7d' | '30d';
 type Granularity = 'hour' | 'day';
 interface DataPoint { label: string; count: number; }
+interface ChartResponse { data: DataPoint[]; total: number; granularity: Granularity; }
 
 const props = defineProps<{
   filter?: 'all' | 'real';
@@ -213,11 +215,9 @@ function buildChart(filled: DataPoint[], gran: Granularity) {
 async function fetchAndUpdate() {
   loading.value = true;
   try {
-    const res = await fetch(
+    const json = await apiFetch<ChartResponse>(
       `/api/v1/visits/chart?range=${selectedRange.value}&filter=${props.filter ?? 'all'}`
     );
-    if (!res.ok) return;
-    const json = await res.json() as { data: DataPoint[]; total: number; granularity: Granularity };
     const filled = fillGaps(json.data, selectedRange.value, json.granularity);
     total.value  = json.total;
     emit('stats-update', json.total, rangeLabel.value);

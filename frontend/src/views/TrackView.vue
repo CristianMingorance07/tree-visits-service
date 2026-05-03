@@ -217,7 +217,8 @@
 import { ref, computed, nextTick, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import confetti from 'canvas-confetti';
-import type { TrackResult } from '../types/api';
+import { apiFetch } from '../lib/api';
+import type { TrackResult, CustomerListItem, ConfigResponse } from '../types/api';
 
 const route = useRoute();
 
@@ -303,26 +304,18 @@ async function recordVisit() {
 
     if (lastVisitTs && now - parseInt(lastVisitTs, 10) < VISIT_COOLDOWN_MS) {
       cooldownMsg.value = formatElapsed(now - parseInt(lastVisitTs, 10));
-      const statsRes = await fetch(`/api/v1/customers/${encodeURIComponent(id)}`);
-      if (statsRes.ok) {
-        const customer = await statsRes.json() as {
-          customerId: string; totalVisits: number; treesPlanted: number;
-          lastSeen: string; visitsUntilNextTree: number;
-        };
-        result.value = { ...customer, treeEarned: false, visitsPerTree: 10 };
-        const cfgRes = await fetch('/api/v1/config');
-        if (cfgRes.ok) {
-          const cfg = await cfgRes.json() as { visitsPerTree: number };
-          result.value.visitsPerTree = cfg.visitsPerTree;
-        }
-      }
+      try {
+        const [customer, cfg] = await Promise.all([
+          apiFetch<CustomerListItem>(`/api/v1/customers/${encodeURIComponent(id)}`),
+          apiFetch<ConfigResponse>('/api/v1/config'),
+        ]);
+        result.value = { ...customer, treeEarned: false, visitsPerTree: cfg.visitsPerTree };
+      } catch { /* stats unavailable — show cooldown screen without data */ }
       state.value = 'cooldown';
       return;
     }
 
-    const res = await fetch(`/api/v1/visits/track/${encodeURIComponent(id)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    result.value = await res.json() as TrackResult;
+    result.value = await apiFetch<TrackResult>(`/api/v1/visits/track/${encodeURIComponent(id)}`);
 
     try { localStorage.setItem(cooldownKey, String(now)); } catch { /* private browsing */ }
 
