@@ -201,7 +201,6 @@
                 v-if="liveCustomers.length"
                 :customers="liveCustomers"
                 :visits-per-tree="visitsPerTree"
-                :show-qr="false"
               />
             </div>
 
