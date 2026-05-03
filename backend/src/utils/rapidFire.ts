@@ -1,3 +1,5 @@
+import { config } from '../config';
+
 interface Bucket {
   timestamps: number[];
 }
@@ -5,7 +7,6 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 const WINDOW_MS = 30_000; // 30-second sliding window
-const MAX_HITS = 3;       // more than 3 from same IP+ID in 30s = rapid fire
 
 // Prune stale buckets every minute — does not keep the process alive
 const pruner = setInterval(() => {
@@ -32,7 +33,7 @@ export function isRapidFire(ip: string, customerId: string): boolean {
   bucket.timestamps = bucket.timestamps.filter(t => t > cutoff);
   bucket.timestamps.push(now);
 
-  return bucket.timestamps.length > MAX_HITS;
+  return bucket.timestamps.length > config.rapidFireMaxHits;
 }
 
 export function _resetBucketsForTest(): void {
