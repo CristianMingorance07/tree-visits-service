@@ -84,9 +84,9 @@
               <!-- Demo stats -->
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatsCard
-                  title="Visits (24 h)"
-                  :value="totalVisits24h"
-                  subtitle="simulated + real · last 24h"
+                  title="Visits"
+                  :value="demoChartTotal"
+                  :subtitle="demoChartLabel"
                   icon="📈"
                 />
                 <StatsCard
@@ -98,20 +98,20 @@
                 <StatsCard
                   title="Trees Planted"
                   :value="totalTreesPlanted"
-                  subtitle="trees funded by visits"
+                  subtitle="funded by visits"
                   icon="🌳"
                 />
               </div>
 
               <div class="card-accent p-6">
-                <VisitsChart filter="all" :last-updated="lastUpdated" />
+                <VisitsChart filter="all" :last-updated="lastUpdated" @stats-update="onDemoStats" />
               </div>
 
               <EventSimulator :visits-per-tree="visitsPerTree" @visit-recorded="refresh" />
 
               <LiveDashboard
                 mode="demo"
-                :scans="demoScans"
+                :visits="demoVisits"
                 :visits-per-tree="visitsPerTree"
               />
 
@@ -127,31 +127,31 @@
               <!-- Live-only stats -->
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatsCard
-                  title="Real Scans (24 h)"
-                  :value="liveVisits24h"
-                  subtitle="QR scans in the last 24h"
-                  icon="📲"
+                  title="Visits"
+                  :value="liveChartTotal"
+                  :subtitle="liveChartLabel"
+                  icon="📈"
                 />
                 <StatsCard
-                  title="Real Devices"
+                  title="Devices"
                   :value="liveDevices"
-                  subtitle="unique real-world devices"
+                  subtitle="unique devices tracked"
                   icon="📱"
                 />
                 <StatsCard
-                  title="Trees (real)"
+                  title="Trees"
                   :value="liveTrees"
-                  subtitle="planted via real visits"
+                  subtitle="funded by visits"
                   icon="🌳"
                 />
               </div>
 
               <div class="card-accent p-6">
-                <VisitsChart filter="real" :last-updated="lastUpdated" />
+                <VisitsChart filter="real" :last-updated="lastUpdated" @stats-update="onLiveStats" />
               </div>
 
               <LiveDashboard
-                :scans="recentScans"
+                :visits="recentVisits"
                 :visits-per-tree="visitsPerTree"
               />
 
@@ -188,6 +188,20 @@ import SkeletonCard from '../components/SkeletonCard.vue';
 
 const activeTab = ref<'demo' | 'live'>('demo');
 
+const demoChartTotal = ref(0);
+const demoChartLabel = ref('Last 24 hours');
+const liveChartTotal = ref(0);
+const liveChartLabel = ref('Last 24 hours');
+
+function onDemoStats(total: number, label: string) {
+  demoChartTotal.value = total;
+  demoChartLabel.value = label;
+}
+function onLiveStats(total: number, label: string) {
+  liveChartTotal.value = total;
+  liveChartLabel.value = label;
+}
+
 const demoCustomers = computed(() =>
   customers.value.filter(c => c.customerId.startsWith('device-store-'))
 );
@@ -196,14 +210,12 @@ const liveCustomers = computed(() =>
 );
 
 const {
-  totalVisits24h,
   totalTreesPlanted,
   totalCustomers,
   visitsPerTree,
   customers,
-  recentScans,
-  demoScans,
-  liveVisits24h,
+  recentVisits,
+  demoVisits,
   liveDevices,
   liveTrees,
   isLoading,

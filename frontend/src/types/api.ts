@@ -53,7 +53,7 @@ export interface DeviceInfo {
   brand: string | null;
 }
 
-export interface RecentScan {
+export interface RecentTrackedVisit {
   id: number;
   customerId: string;
   visitedAt: string;
@@ -64,11 +64,11 @@ export interface RecentScan {
   language: string | null;
 }
 
-export interface RecentScansResponse {
-  scans: RecentScan[];
+export interface RecentVisitsResponse {
+  visits: RecentTrackedVisit[];
 }
 
-export interface ScanResult {
+export interface TrackResult {
   customerId: string;
   totalVisits: number;
   treesPlanted: number;

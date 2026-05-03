@@ -18,7 +18,7 @@
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Visits</span>
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Trees</span>
       <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-right">Next</span>
-      <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-center">Scan</span>
+      <span class="text-[9px] font-bold uppercase tracking-wider text-gray-300 text-center">Visit</span>
     </div>
 
     <!-- Skeleton -->
@@ -112,14 +112,14 @@
               class="w-24 h-24 rounded-lg border border-gray-100 shrink-0"
             />
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] font-bold text-gray-700 mb-1">Scan to record a real visit</p>
+              <p class="text-[11px] font-bold text-gray-700 mb-1">Record a real visit</p>
               <p class="text-[10px] text-gray-400 mb-2 leading-relaxed">
-                Any device that scans this registers a real visit via
-                <span class="font-mono">GET /api/v1/visits/scan/:id</span>.
-                Share the link to test from anywhere.
+                Any device that opens this link records a real visit via
+                <span class="font-mono">GET /api/v1/visits/track/:id</span>.
+                Share it to test from anywhere.
               </p>
               <p class="text-[10px] font-mono text-[#3aaa68] break-all mb-3">
-                {{ scanUrl(customer.customerId) }}
+                {{ trackingUrl(customer.customerId) }}
               </p>
               <button
                 @click="share(customer.customerId)"
@@ -144,7 +144,7 @@
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
         <rect x="3" y="14" width="7" height="7"/>
       </svg>
-      to scan from any device
+      to visit from any device
     </p>
   </div>
 </template>
@@ -165,14 +165,14 @@ const activeQr = ref<string | null>(null);
 const qrCache = ref<Record<string, string>>({});
 const copied = ref<string | null>(null);
 
-function scanUrl(customerId: string): string {
+function trackingUrl(customerId: string): string {
   return `${window.location.origin}/track?id=${encodeURIComponent(customerId)}`;
 }
 
 async function generateQr(customerId: string) {
   if (qrCache.value[customerId]) return;
   try {
-    qrCache.value[customerId] = await QRCode.toDataURL(scanUrl(customerId), {
+    qrCache.value[customerId] = await QRCode.toDataURL(trackingUrl(customerId), {
       width: 192,
       margin: 1,
       color: { dark: '#111827', light: '#ffffff' },
@@ -192,7 +192,7 @@ function toggleQr(customerId: string) {
 }
 
 async function share(customerId: string) {
-  const url = scanUrl(customerId);
+  const url = trackingUrl(customerId);
   if (navigator.share) {
     await navigator.share({ title: `Visit tracker · ${customerId}`, url }).catch(() => null);
   } else {

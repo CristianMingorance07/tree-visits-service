@@ -88,7 +88,7 @@ The 10-second interval was chosen as the midpoint between "feels live" and "does
 `@fastify/rate-limit` is registered with `global: false`, which disables the default blanket limit and requires an explicit `config.rateLimit` on each route. Only mutation endpoints carry a limit:
 
 - `POST /api/v1/visits` — 120 req/min (device events, burst-tolerant)
-- `GET /api/v1/visits/scan/:customerId` — 60 req/min (QR scan, human-paced)
+- `GET /api/v1/visits/track/:customerId` — 60 req/min (public tracking link, human-paced)
 
 Read endpoints (stats, chart, customers) are unrestricted. A global limit would penalise the dashboard's own polling loop: with two self-fetching chart components and a six-endpoint composable poll every 10 seconds, the baseline is ~48 req/min before any user interaction — uncomfortably close to a tight global cap. Targeting only writes avoids this while still protecting against abusive visit injection.
 
@@ -106,14 +106,14 @@ Destructive endpoints (`POST /api/v1/reset`, `PATCH /api/v1/config`) are protect
 
 ---
 
-## QR scan endpoint and async geo enrichment
+## Public tracking endpoint and async geo enrichment
 
-`GET /api/v1/visits/scan/:customerId` exists alongside the device `POST /api/v1/visits` to support a different ingestion path: a physical QR code that customers scan with their own phones. The scan endpoint:
+`GET /api/v1/visits/track/:customerId` exists alongside the device `POST /api/v1/visits` to support a different ingestion path: a public tracking link that can be opened directly or shared as a QR code. The tracking endpoint:
 
 1. Calls `registerVisit` synchronously — the 201 response is sent immediately with the visit result.
 2. Then, in a `setImmediate` callback (after the response is flushed), fires an async geo lookup against `ip-api.com` using the request's real IP, and enriches the visit row with country, city, and language via a background `UPDATE`.
 
-The `setImmediate` is deliberate: geo lookup adds 100–500 ms of network latency. Doing it in the request path would slow every QR scan. Doing it after the response means the visit is always recorded instantly, and the geo data appears in the dashboard on the next poll cycle. A 1500 ms abort timeout guards against hanging connections to the geo API.
+The `setImmediate` is deliberate: geo lookup adds 100–500 ms of network latency. Doing it in the request path would slow every tracked visit. Doing it after the response means the visit is always recorded instantly, and the geo data appears in the dashboard on the next poll cycle. A 1500 ms abort timeout guards against hanging connections to the geo API.
 
 Private and loopback IPs (127.x, 10.x, 192.168.x, etc.) are short-circuited — a regex check skips the geo call entirely since these addresses would return no useful data.
 

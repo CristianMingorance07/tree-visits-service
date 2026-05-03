@@ -77,16 +77,39 @@ export async function buildServer() {
     });
   }
 
-  fastify.post('/api/v1/reset', async (request, reply) => {
-    if (config.adminSecret) {
-      const provided = request.headers['x-admin-secret'];
-      if (provided !== config.adminSecret) {
-        return reply.status(401).send({ error: 'Unauthorized' });
+  fastify.post(
+    '/api/v1/reset',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['Config'],
+        summary: 'Reset demo data and reseed the database',
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              ok: { type: 'boolean' },
+              message: { type: 'string' },
+            },
+          },
+          401: {
+            type: 'object',
+            properties: { error: { type: 'string' } },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (config.adminSecret) {
+        const provided = request.headers['x-admin-secret'];
+        if (provided !== config.adminSecret) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
       }
-    }
-    resetAndSeed();
-    return reply.send({ ok: true, message: 'Demo data reset successfully' });
-  });
+      resetAndSeed();
+      return reply.send({ ok: true, message: 'Demo data reset successfully' });
+    },
+  );
 
   fastify.setErrorHandler((error, _request, reply) => {
     if (error.validation) {
@@ -121,4 +144,6 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}

@@ -6,11 +6,11 @@ import type {
   ConfigResponse,
   CustomerListItem,
   CustomersListResponse,
-  RecentScan,
-  RecentScansResponse,
+  RecentTrackedVisit,
+  RecentVisitsResponse,
 } from '../types/api';
 
-export type { CustomerListItem, RecentScan };
+export type { CustomerListItem, RecentTrackedVisit };
 export const POLL_INTERVAL_MS = 10_000;
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'error';
@@ -28,8 +28,8 @@ export function useVisitsData() {
   const totalVisits = ref(0);
   const visitsPerTree = ref(10);
   const customers = ref<CustomerListItem[]>([]);
-  const recentScans = ref<RecentScan[]>([]);
-  const demoScans = ref<RecentScan[]>([]);
+  const recentVisits = ref<RecentTrackedVisit[]>([]);
+  const demoVisits = ref<RecentTrackedVisit[]>([]);
   const liveVisits24h = ref(0);
   const liveDevices = ref(0);
   const liveTrees = ref(0);
@@ -48,9 +48,9 @@ export function useVisitsData() {
         apiFetch<StatsResponse>('/api/v1/stats'),
         apiFetch<ConfigResponse>('/api/v1/config'),
         apiFetch<CustomersListResponse>('/api/v1/customers'),
-        apiFetch<RecentScansResponse>('/api/v1/visits/recent?filter=real'),
+        apiFetch<RecentVisitsResponse>('/api/v1/visits/recent?filter=real'),
         apiFetch<LiveStatsResponse>('/api/v1/stats/live'),
-        apiFetch<RecentScansResponse>('/api/v1/visits/recent?filter=demo'),
+        apiFetch<RecentVisitsResponse>('/api/v1/visits/recent?filter=demo'),
       ]);
 
       totalVisits24h.value = hourly.totalVisits24h;
@@ -59,8 +59,8 @@ export function useVisitsData() {
       totalVisits.value = stats.totalVisits;
       visitsPerTree.value = config.visitsPerTree;
       customers.value = customerList.customers;
-      recentScans.value = recent.scans;
-      demoScans.value = demoFeed.scans;
+      recentVisits.value = recent.visits;
+      demoVisits.value = demoFeed.visits;
       liveVisits24h.value = liveStats.realVisits24h;
       liveDevices.value = liveStats.realDevices;
       liveTrees.value = liveStats.realTrees;
@@ -93,8 +93,8 @@ export function useVisitsData() {
     totalVisits,
     visitsPerTree,
     customers,
-    recentScans,
-    demoScans,
+    recentVisits,
+    demoVisits,
     liveVisits24h,
     liveDevices,
     liveTrees,

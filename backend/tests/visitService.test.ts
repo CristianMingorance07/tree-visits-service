@@ -23,6 +23,12 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id TEXT NOT NULL,
     visited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_agent TEXT,
+    ip TEXT,
+    country TEXT,
+    country_code TEXT,
+    city TEXT,
+    language TEXT,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
   );
 

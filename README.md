@@ -11,7 +11,7 @@ Each time a customer device sends a visit event, the service atomically incremen
 A live Vue 3 dashboard polls the API every 10 seconds. It has two tabs:
 
 - **Demo** — a built-in device simulator that sends visits and shows them in real time, with a multi-range chart (24h / 7d / 30d) and a leaderboard.
-- **Live** — tracks real QR scan visits from physical devices, enriched with geo-location (country, city) and browser/OS data. Includes a shareable QR code and per-device visit history.
+- **Live** — tracks real visits opened from a public tracking link, enriched with geo-location (country, city) and browser/OS data. The link can also be shared as a QR code.
 
 ---
 
@@ -86,7 +86,7 @@ Browser
 docker compose up --build
 ```
 
-- Dashboard → **http://localhost:80**
+- Dashboard → **http://localhost:8080**
 - API → **http://localhost:3000**
 - API docs → **http://localhost:3000/docs** (dev mode only)
 
@@ -124,14 +124,14 @@ npm run dev
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST` | `/api/v1/visits` | — | Record a device visit — returns milestone status |
-| `GET` | `/api/v1/visits/scan/:customerId` | — | Record a visit via QR scan — enriches with geo + UA |
+| `GET` | `/api/v1/visits/track/:customerId` | — | Record a visit via public tracking link — enriches with geo + UA |
 | `GET` | `/api/v1/visits/recent` | — | Recent visits (`?filter=real` or `?filter=demo`) |
 | `GET` | `/api/v1/visits/chart` | — | Chart data (`?range=24h\|7d\|30d&filter=all\|real`) |
 | `GET` | `/api/v1/visits/hourly` | — | Hourly counts for the last 24 h |
 | `GET` | `/api/v1/customers` | — | All customers, sorted by trees then visit progress |
 | `GET` | `/api/v1/customers/:id` | — | Per-customer stats |
 | `GET` | `/api/v1/stats` | — | Aggregate totals (all visits) |
-| `GET` | `/api/v1/stats/live` | — | Aggregate totals (real QR scans only) |
+| `GET` | `/api/v1/stats/live` | — | Aggregate totals (real tracking-link visits only) |
 | `GET` | `/api/v1/config` | — | Current `visits_per_tree` |
 | `PATCH` | `/api/v1/config` | `ADMIN_SECRET` | Update threshold at runtime |
 | `POST` | `/api/v1/reset` | `ADMIN_SECRET` | Reset and reseed demo data |

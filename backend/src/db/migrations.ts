@@ -1,4 +1,5 @@
 import { getDb } from './index';
+import { config } from '../config';
 
 export function runMigrations(): void {
   const db = getDb();
@@ -23,11 +24,13 @@ export function runMigrations(): void {
       value TEXT NOT NULL
     );
 
-    INSERT OR IGNORE INTO app_config (key, value) VALUES ('visits_per_tree', '10');
-
     CREATE INDEX IF NOT EXISTS idx_visits_customer_id ON visits(customer_id);
     CREATE INDEX IF NOT EXISTS idx_visits_visited_at ON visits(visited_at);
   `);
+
+  db.prepare(`INSERT OR IGNORE INTO app_config (key, value) VALUES ('visits_per_tree', ?)`).run(
+    String(config.visitsPerTree),
+  );
 
   for (const col of [
     'ALTER TABLE visits ADD COLUMN user_agent TEXT',

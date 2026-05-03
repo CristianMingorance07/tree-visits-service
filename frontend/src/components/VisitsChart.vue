@@ -50,6 +50,10 @@ const props = defineProps<{
   lastUpdated?: Date | null;
 }>();
 
+const emit = defineEmits<{
+  'stats-update': [total: number, description: string];
+}>();
+
 const RANGES: { value: Range; label: string; description: string }[] = [
   { value: '24h', label: '24H', description: 'Last 24 hours' },
   { value: '7d',  label: '7D',  description: 'Last 7 days'   },
@@ -216,6 +220,7 @@ async function fetchAndUpdate() {
     const json = await res.json() as { data: DataPoint[]; total: number; granularity: Granularity };
     const filled = fillGaps(json.data, selectedRange.value, json.granularity);
     total.value  = json.total;
+    emit('stats-update', json.total, rangeLabel.value);
     rawLabels    = filled.map(d => d.label);
     currentGran  = json.granularity;
 

@@ -6,13 +6,13 @@
       <Transition name="mode" mode="out-in">
 
         <!-- Empty: hero QR -->
-        <div v-if="!scans.length" key="empty" class="text-center">
+        <div v-if="!visits.length" key="empty" class="text-center">
           <div class="flex justify-center mb-5">
             <img src="/tree-nation-icon.png" alt="Tree-Nation" class="w-14 h-14" />
           </div>
           <h2 class="text-xl font-black text-gray-900 mb-2">Start tracking real visits</h2>
           <p class="text-gray-400 text-sm mb-8 max-w-xs mx-auto">
-            Share this QR — each device that scans it gets its own personal tree journey
+            Share this link — every visit gets its own personal tree journey
           </p>
           <div class="flex justify-center mb-5">
             <div class="p-3 rounded-2xl border-2 border-gray-100 bg-white shadow-sm inline-block">
@@ -69,7 +69,7 @@
           <h2 class="text-[#3aaa68] text-xs font-bold uppercase tracking-widest">Live Device Feed</h2>
           <p class="text-gray-400 text-[10px] mt-0.5">
             {{ deviceGroups.length
-            ? `${deviceGroups.length} device${deviceGroups.length !== 1 ? 's' : ''} · ${scans.length} total ${mode === 'demo' ? 'visits' : 'scans'}`
+            ? `${deviceGroups.length} device${deviceGroups.length !== 1 ? 's' : ''} · ${visits.length} total visits`
             : mode === 'demo' ? 'Simulated device activity · updates automatically' : 'Real device visits · updates automatically'
           }}
           </p>
@@ -84,12 +84,12 @@
       <div v-if="!deviceGroups.length" class="flex flex-col items-center justify-center text-center py-12">
         <div class="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-2xl mb-3">📡</div>
         <p class="text-gray-500 text-xs font-semibold mb-1">
-          {{ mode === 'demo' ? 'No simulator activity yet' : 'Waiting for real scans' }}
+          {{ mode === 'demo' ? 'No simulator activity yet' : 'No real visits yet' }}
         </p>
         <p class="text-gray-300 text-[10px] leading-relaxed max-w-[180px]">
           {{ mode === 'demo'
             ? 'Click a device in the simulator above — visits will appear here instantly'
-            : 'Scan or share the QR above — device visits will appear here instantly'
+            : 'Share the link above — device visits will appear here instantly'
           }}
         </p>
       </div>
@@ -143,7 +143,7 @@
             <!-- Visit count badge -->
             <div class="shrink-0 flex flex-col items-end gap-1">
               <span class="inline-flex items-center gap-1 text-[10px] font-bold text-[#3aaa68] bg-[#3aaa68]/8 px-2 py-0.5 rounded-full">
-                {{ group.visits.length }} scan{{ group.visits.length !== 1 ? 's' : '' }}
+                {{ group.visits.length }} visit{{ group.visits.length !== 1 ? 's' : '' }}
               </span>
               <span class="text-[9px] text-gray-300 font-mono">{{ timeAgo(group.lastVisit) }}</span>
             </div>
@@ -210,10 +210,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, defineComponent, h } from 'vue';
 import QRCode from 'qrcode';
-import type { RecentScan } from '../types/api';
+import type { RecentTrackedVisit } from '../types/api';
 
 const props = defineProps<{
-  scans: RecentScan[];
+  visits: RecentTrackedVisit[];
   visitsPerTree: number;
   mode?: 'demo' | 'live';
 }>();
@@ -224,12 +224,12 @@ const expanded = ref<Record<string, boolean>>({});
 
 const trackUrl = `${window.location.origin}/track`;
 const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
-  `🌳 Scan this to track your visit and help plant trees!\n${trackUrl}`
+  `🌳 Open this link to track your visit and help plant trees!\n${trackUrl}`
 )}`;
 
 interface DeviceGroup {
   customerId: string;
-  device: RecentScan['device'];
+  device: RecentTrackedVisit['device'];
   country: string | null;
   countryCode: string | null;
   city: string | null;
@@ -240,28 +240,28 @@ interface DeviceGroup {
 
 const deviceGroups = computed<DeviceGroup[]>(() => {
   const map = new Map<string, DeviceGroup>();
-  for (const scan of props.scans) {
-    if (!map.has(scan.customerId)) {
-      map.set(scan.customerId, {
-        customerId: scan.customerId,
-        device: scan.device,
-        country: scan.country,
-        countryCode: scan.countryCode,
-        city: scan.city,
-        language: scan.language,
+  for (const visit of props.visits) {
+    if (!map.has(visit.customerId)) {
+      map.set(visit.customerId, {
+        customerId: visit.customerId,
+        device: visit.device,
+        country: visit.country,
+        countryCode: visit.countryCode,
+        city: visit.city,
+        language: visit.language,
         visits: [],
-        lastVisit: scan.visitedAt,
+        lastVisit: visit.visitedAt,
       });
     } else {
-      const g = map.get(scan.customerId)!;
-      if (!g.country && scan.country) {
-        g.country = scan.country;
-        g.countryCode = scan.countryCode;
-        g.city = scan.city;
-        g.language = scan.language;
+      const g = map.get(visit.customerId)!;
+      if (!g.country && visit.country) {
+        g.country = visit.country;
+        g.countryCode = visit.countryCode;
+        g.city = visit.city;
+        g.language = visit.language;
       }
     }
-    map.get(scan.customerId)!.visits.push({ id: scan.id, visitedAt: scan.visitedAt });
+    map.get(visit.customerId)!.visits.push({ id: visit.id, visitedAt: visit.visitedAt });
   }
   return [...map.values()].sort(
     (a, b) => new Date(b.lastVisit).getTime() - new Date(a.lastVisit).getTime()

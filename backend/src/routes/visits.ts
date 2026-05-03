@@ -4,13 +4,14 @@ import { getDb } from '../db';
 import { toISO } from '../utils/date';
 import { lookupGeo, parseLanguage } from '../utils/geo';
 
-interface ScanParams { customerId: string; }
+interface TrackParams { customerId: string; }
 interface ConfigRow { value: string; }
 interface PostVisitBody { customerId: string; }
 interface HourlyRow { hour: string; count: number; }
 interface StatsRow { totalTreesPlanted: number; totalCustomers: number; totalVisits: number; }
 interface ChartQuerystring { range?: string; filter?: string; }
 interface ChartRow { label: string; count: number; }
+interface LiveTreesRow { realTrees: number; }
 interface RecentRow {
   id: number;
   customer_id: string;
@@ -22,6 +23,13 @@ interface RecentRow {
   city: string | null;
   language: string | null;
 }
+
+const CUSTOMER_ID_SCHEMA = {
+  type: 'string',
+  minLength: 1,
+  maxLength: 100,
+  pattern: '^[a-zA-Z0-9_\\-.]+$',
+} as const;
 
 function parseUA(ua: string): { type: string; os: string; browser: string; brand: string | null } {
   const type =
@@ -67,7 +75,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['customerId'],
           properties: {
-            customerId: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_\\-\\.]+$' },
+            customerId: CUSTOMER_ID_SCHEMA,
           },
           additionalProperties: false,
         },
@@ -91,13 +99,21 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
-  fastify.get<{ Params: ScanParams }>(
-    '/api/v1/visits/scan/:customerId',
+  fastify.get<{ Params: TrackParams }>(
+    '/api/v1/visits/track/:customerId',
     {
       config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         tags: ['Visits'],
-        summary: 'Record a visit via QR scan — returns visit result as JSON',
+        summary: 'Record a visit via public tracking link — returns visit result as JSON',
+        params: {
+          type: 'object',
+          required: ['customerId'],
+          properties: {
+            customerId: CUSTOMER_ID_SCHEMA,
+          },
+          additionalProperties: false,
+        },
         response: {
           201: {
             type: 'object',
@@ -133,13 +149,17 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       const visitId = result.visitId;
       const acceptLang = (request.headers['accept-language'] as string) ?? '';
       setImmediate(async () => {
-        const [geo] = await Promise.all([lookupGeo(ip)]);
-        enrichVisit(visitId, {
-          country: geo?.country ?? null,
-          countryCode: geo?.countryCode ?? null,
-          city: geo?.city ?? null,
-          language: parseLanguage(acceptLang),
-        });
+        try {
+          const geo = await lookupGeo(ip);
+          enrichVisit(visitId, {
+            country: geo?.country ?? null,
+            countryCode: geo?.countryCode ?? null,
+            city: geo?.city ?? null,
+            language: parseLanguage(acceptLang),
+          });
+        } catch (err) {
+          request.log.warn({ err, visitId }, 'Failed to enrich tracked visit');
+        }
       });
 
       return reply.status(201).send({
@@ -159,7 +179,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     {
       schema: {
         tags: ['Visits'],
-        summary: 'Recent visits — filter=real (QR scans) or filter=demo (simulator devices)',
+        summary: 'Recent visits — filter=real (tracking links) or filter=demo (simulator devices)',
         querystring: {
           type: 'object',
           properties: { filter: { type: 'string', enum: ['real', 'demo'] } },
@@ -168,7 +188,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
           200: {
             type: 'object',
             properties: {
-              scans: {
+              visits: {
                 type: 'array',
                 items: {
                   type: 'object',
@@ -217,7 +237,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
            ORDER BY visited_at DESC LIMIT 100`,
         ).all() as DemoRow[];
         return reply.send({
-          scans: rows.map(r => {
+          visits: rows.map(r => {
             const info = DEMO_INFO[r.customer_id] ?? { type: 'desktop', name: r.customer_id };
             return {
               id: r.id,
@@ -242,7 +262,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
         .all() as RecentRow[];
 
       return reply.send({
-        scans: rows.map(r => ({
+        visits: rows.map(r => ({
           id: r.id,
           customerId: r.customer_id,
           visitedAt: toISO(r.visited_at),
@@ -337,7 +357,7 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     {
       schema: {
         tags: ['Stats'],
-        summary: 'Statistics for real QR scan visits only (user_agent present)',
+        summary: 'Statistics for real tracking-link visits only (user_agent present)',
         response: {
           200: {
             type: 'object',
@@ -352,9 +372,6 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
     },
     async (_request, reply) => {
       const db = getDb();
-      const cfg = db.prepare(`SELECT value FROM app_config WHERE key = 'visits_per_tree'`).get() as ConfigRow;
-      const visitsPerTree = parseInt(cfg.value, 10);
-
       const realVisits24h = (db.prepare(
         `SELECT COUNT(*) as cnt FROM visits WHERE user_agent IS NOT NULL AND visited_at >= datetime('now', '-24 hours')`,
       ).get() as { cnt: number }).cnt;
@@ -364,7 +381,14 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       ).all() as { cnt: number }[];
 
       const realDevices = perDevice.length;
-      const realTrees = perDevice.reduce((sum, r) => sum + Math.floor(r.cnt / visitsPerTree), 0);
+      const { realTrees } = db.prepare(`
+        SELECT COALESCE(SUM(c.trees_planted), 0) as realTrees
+        FROM customers c
+        WHERE EXISTS (
+          SELECT 1 FROM visits v
+          WHERE v.customer_id = c.id AND v.user_agent IS NOT NULL
+        )
+      `).get() as LiveTreesRow;
 
       return reply.send({ realVisits24h, realDevices, realTrees });
     },
