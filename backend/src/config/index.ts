@@ -16,6 +16,7 @@ if (nodeEnv === 'production' && !adminSecret) {
 export const config = {
   port: parseIntEnv('PORT', '3000', 1),
   visitsPerTree: parseIntEnv('VISITS_PER_TREE', '10', 1),
+  rapidFireMaxHits: parseIntEnv('RAPID_FIRE_MAX_HITS', '3', 1),
   dbPath: process.env.DB_PATH ?? './data/visits.db',
   nodeEnv,
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:8080')

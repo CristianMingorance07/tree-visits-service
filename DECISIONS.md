@@ -79,7 +79,7 @@ The public tracking endpoint is intentionally open (no auth required — it need
 3. **Bot User-Agent detection** — known crawler UAs (Googlebot, curl, python-requests, etc.) get a 201 that mimics success. The goal is to look like a normal endpoint to automated scans.
 4. **Rapid-fire sliding window** — more than 3 requests from the same IP + customer ID pair within 30 seconds get silently dropped. This catches the simple loop attack without breaking users who open the same link a couple of times.
 
-The 30s/3-hit window was chosen based on what a human could realistically trigger: if someone scans a QR code, the page loads, maybe they reload once — that's 2 hits. Three gives a small buffer; anything over that in 30 seconds is almost certainly not organic.
+The window duration is fixed at 30 seconds. The hit threshold defaults to 3 and is configurable via `RAPID_FIRE_MAX_HITS`. Three was chosen based on what a human could realistically trigger: scan a QR code, page loads, maybe reload once — that's 2 hits. Three gives a small buffer; anything over that in 30 seconds is almost certainly not organic. In demo or evaluation environments the threshold can be raised (e.g. `RAPID_FIRE_MAX_HITS=30`) so the tracking page can be refreshed freely to show the visit counter incrementing toward a milestone, without weakening production deployments where the default stays at 3.
 
 ---
 

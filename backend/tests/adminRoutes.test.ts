@@ -17,6 +17,7 @@ vi.mock('../src/config', () => ({
   config: {
     port: 3000,
     visitsPerTree: 10,
+    rapidFireMaxHits: 3,
     dbPath: ':memory:',
     nodeEnv: 'test',
     corsOrigins: ['http://localhost:5173'],
