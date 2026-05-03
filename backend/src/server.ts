@@ -22,7 +22,7 @@ export async function buildServer() {
   });
 
   await fastify.register(rateLimit, {
-    max: 300,
+    max: 600,
     timeWindow: '1 minute',
     errorResponseBuilder: (_req, context) => ({
       statusCode: 429,

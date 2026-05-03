@@ -119,10 +119,21 @@
       </button>
     </div>
 
+    <!-- Rate limit toast -->
+    <Transition name="toast">
+      <div
+        v-if="rateLimited"
+        class="border border-amber-200 bg-amber-50 text-amber-700 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2"
+      >
+        <span class="text-base shrink-0">⏱</span>
+        <span>Too many requests — slow down a little and try again</span>
+      </div>
+    </Transition>
+
     <!-- Result toast -->
     <Transition name="toast">
       <div
-        v-if="lastResult"
+        v-if="lastResult && !rateLimited"
         :class="lastResult.treeEarned
           ? 'bg-[#65D693]/10 border-[#65D693]/40 text-[#3aaa68]'
           : 'bg-gray-50 border-gray-200 text-gray-600'"
@@ -185,6 +196,7 @@ const devices = ref<DeviceState[]>(
 
 const pending = ref<string | null>(null);
 const lastResult = ref<VisitResponse | null>(null);
+const rateLimited = ref(false);
 const sessionTrees = ref(0);
 const autoMode = ref(false);
 const resetting = ref(false);
@@ -253,6 +265,10 @@ async function sendVisit(deviceId: string) {
     clearResultTimer = setTimeout(() => { lastResult.value = null; }, 5_000);
   } catch (err) {
     if (!(err instanceof ApiError)) throw err;
+    if (err.status === 429) {
+      rateLimited.value = true;
+      setTimeout(() => { rateLimited.value = false; }, 3000);
+    }
   } finally {
     pending.value = null;
   }

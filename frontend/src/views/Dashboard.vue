@@ -76,7 +76,7 @@
 
         <!-- Hard error -->
         <div
-          v-else-if="error && !totalVisits"
+          v-else-if="error && !totalCustomers"
           key="error"
           class="card p-12 text-center"
         >
