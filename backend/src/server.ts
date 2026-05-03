@@ -115,6 +115,9 @@ export async function buildServer() {
     if (error.validation) {
       return reply.status(400).send({ error: 'Validation error', details: error.message });
     }
+    if (error.statusCode && error.statusCode < 500) {
+      return reply.status(error.statusCode).send({ error: error.message });
+    }
     fastify.log.error(error);
     return reply.status(500).send({ error: 'Internal server error' });
   });

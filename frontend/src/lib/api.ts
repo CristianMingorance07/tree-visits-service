@@ -15,8 +15,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (!res.ok) {
     let message = `${res.status}`;
     try {
-      const body = await res.json() as { message?: string };
-      if (body.message) message = body.message;
+      const body = await res.json() as { error?: string; message?: string };
+      if (body.message || body.error) message = body.message ?? body.error ?? message;
     } catch { /* non-JSON body */ }
     throw new ApiError(res.status, message);
   }

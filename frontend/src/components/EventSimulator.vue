@@ -142,28 +142,6 @@
       </div>
     </Transition>
 
-    <!-- Development-only destructive action -->
-    <div
-      v-if="isDev"
-      class="mt-4 rounded-xl border border-red-100 bg-red-50/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-    >
-      <div>
-        <p class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Development reset</p>
-        <p class="text-xs text-red-700 font-semibold">Reset all stored visits and customers</p>
-        <p class="text-[10px] text-red-400 mt-0.5">
-          Clears the database and reloads the seeded demo dataset. Hidden in production.
-        </p>
-      </div>
-      <button
-        @click="handleReset"
-        :disabled="resetting"
-        class="shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-full border transition-all duration-200
-               bg-white border-red-200 text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-        title="Reset all visits and customers"
-      >
-        <span>↺</span> {{ resetting ? 'Resetting...' : 'Reset all data' }}
-      </button>
-    </div>
   </div>
 </template>
 
@@ -176,7 +154,6 @@ import type { VisitResponse, CustomerResponse } from '../types/api';
 
 const props = defineProps<{ visitsPerTree: number }>();
 const emit = defineEmits<{ 'visit-recorded': [] }>();
-const isDev = import.meta.env.DEV;
 
 interface DeviceState {
   id: string;
@@ -214,7 +191,6 @@ const lastResult = ref<VisitResponse | null>(null);
 const rateLimited = ref(false);
 const sessionTrees = ref(0);
 const autoMode = ref(false);
-const resetting = ref(false);
 
 let clearResultTimer: ReturnType<typeof setTimeout> | null = null;
 let autoInterval: ReturnType<typeof setInterval> | null = null;
@@ -286,46 +262,6 @@ async function sendVisit(deviceId: string) {
     }
   } finally {
     pending.value = null;
-  }
-}
-
-async function handleReset() {
-  if (resetting.value) return;
-  const confirmed = window.confirm(
-    'This will delete all current visits and customers, then reload the seeded demo data. Continue?',
-  );
-  if (!confirmed) return;
-
-  resetting.value = true;
-  try {
-    if (autoInterval) {
-      clearInterval(autoInterval);
-      autoInterval = null;
-      autoMode.value = false;
-    }
-    await apiFetch('/api/v1/reset', { method: 'POST' });
-    sessionTrees.value = 0;
-    lastResult.value = null;
-    devices.value.forEach(d => { d.loaded = false; d.celebrating = false; });
-    const results = await Promise.allSettled(
-      DEMO_DEVICES.map(d =>
-        apiFetch<CustomerResponse>(`/api/v1/customers/${encodeURIComponent(d.id)}`),
-      ),
-    );
-    results.forEach((result, i) => {
-      const device = devices.value[i];
-      if (result.status === 'fulfilled') {
-        device.totalVisits = result.value.totalVisits;
-        device.treesPlanted = result.value.treesPlanted;
-        device.visitsUntilNextTree = result.value.visitsUntilNextTree;
-        device.loaded = true;
-      }
-    });
-    emit('visit-recorded');
-  } catch (err) {
-    if (!(err instanceof ApiError)) throw err;
-  } finally {
-    resetting.value = false;
   }
 }
 
