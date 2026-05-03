@@ -3,6 +3,8 @@ import { registerVisit, enrichVisit } from '../services/visitService';
 import { toISO } from '../utils/date';
 import { lookupGeo, parseLanguage } from '../utils/geo';
 import { getVisitsPerTree } from '../repositories/configRepository';
+import { isValidCustomerId, isHoneypotId, isBotUserAgent } from '../utils/customerValidation';
+import { isRapidFire } from '../utils/rapidFire';
 import { getAggregateStats, getTrackedTreesPlanted } from '../repositories/customerRepository';
 import {
   countTrackedDevices,
@@ -131,6 +133,23 @@ export async function visitsRoutes(fastify: FastifyInstance): Promise<void> {
       const ip = (request.headers['x-real-ip'] as string)
         ?? (request.headers['x-forwarded-for'] as string)?.split(',')[0]
         ?? request.ip;
+
+      // --- Anti-bot layers ---
+      if (!isValidCustomerId(customerId)) {
+        return reply.status(400).send({ error: 'Invalid customer ID' });
+      }
+      if (isHoneypotId(customerId)) {
+        request.log.warn({ customerId, ip }, 'honeypot ID — visit silently dropped');
+        return reply.status(200).send({});
+      }
+      if (isBotUserAgent(ua)) {
+        return reply.status(201).send({});
+      }
+      if (isRapidFire(ip, customerId)) {
+        request.log.warn({ ip, customerId }, 'rapid-fire request — visit silently dropped');
+        return reply.status(200).send({});
+      }
+      // -----------------------
 
       const result = registerVisit(customerId, { userAgent: ua || undefined, ip: ip || undefined });
 
