@@ -206,9 +206,14 @@
     </Transition>
 
     <!-- Brand footer -->
-    <div class="absolute bottom-6 flex items-center gap-2" :class="isCelebration ? 'opacity-30' : 'opacity-25'">
-      <img src="/tree-nation-icon.png" alt="Tree-Nation" class="w-5 h-5" />
-      <span class="text-[11px] font-bold" :class="isCelebration ? 'text-white' : 'text-gray-500'">Tree-Nation</span>
+    <div class="absolute bottom-4 flex flex-col items-center gap-1" :class="isCelebration ? 'opacity-25' : 'opacity-20'">
+      <div class="flex items-center gap-2">
+        <img src="/tree-nation-icon.png" alt="Tree-Nation" class="w-5 h-5" />
+        <span class="text-[11px] font-bold" :class="isCelebration ? 'text-white' : 'text-gray-500'">Tree-Nation</span>
+      </div>
+      <span class="text-[9px] font-mono" :class="isCelebration ? 'text-white' : 'text-gray-400'">
+        IP &amp; approximate location collected for visit enrichment
+      </span>
     </div>
   </div>
 </template>
